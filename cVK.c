@@ -2,7 +2,7 @@
  * File              : cVK.c
  * Author            : Igor V. Sementsov <ig.kuzm@gmail.com>
  * Date              : 11.08.2023
- * Last Modified Date: 11.08.2023
+ * Last Modified Date: 12.08.2023
  * Last Modified By  : Igor V. Sementsov <ig.kuzm@gmail.com>
  */
 
@@ -18,6 +18,8 @@
 #include "cJSON.h"
 #include "cVK.h"
 
+#include "http_answer.h"
+
 //add strptime for winapi
 #ifdef _WIN32
 char * strptime(const char* s, const char* f, struct tm* tm);#endif
@@ -31,11 +33,6 @@ char * strptime(const char* s, const char* f, struct tm* tm);#endif
 #define VERIFY_SSL 0
 #define ANSWER_LIMIT 20
 
-//memory allocation helpers
-#define MALLOC(size) ({void* const ___p = malloc(size); if(!___p) {perror("Malloc"); exit(EXIT_FAILURE);} ___p;})
-#define REALLOC(ptr, size)	({ void* const ___s = ptr; void* const ___p = realloc(___s, size);	if(!___p) { perror("Realloc"); exit(EXIT_FAILURE); } ___p; })
-#define NEW(T) ((T*)MALLOC(sizeof(T)))
-
 //error and string helpers
 #define ERRORSTR(ptr, ...) ({if(ptr) {*ptr = MALLOC(BUFSIZ); sprintf(*ptr, __VA_ARGS__);};})
 #define STR(...) ({char ___str[BUFSIZ]; sprintf(___str, __VA_ARGS__); ___str;})
@@ -46,14 +43,18 @@ char * c_vk_url_to_ask_for_verification_code(
 		const char *client_id,  
 		uint32_t access_rights) //https://dev.vk.com/references/access-rights
 {
-	char *requestString = MALLOC(BUFSIZ);
-	sprintf(requestString, "%s?client_id=%s&display=mobile&redirect_uri=localhost:%d&scope=%d&v=%s", 
+	char *requestString = malloc(BUFSIZ);
+	if (!requestString){
+		perror("malloc");
+		return NULL;
+	}
+	sprintf(requestString, "%s?client_id=%s&display=mobile&redirect_uri=http://localhost:%d&scope=%d&v=%s", 
 			OAUTH_URL, client_id, DEFAULT_PORT, access_rights, API_VERS);	
 	
 	return requestString;
 }
 
-char * c_vk_listen_for_code()
+static char * c_vk_listner()
 {
     int socket_desc, client_sock, client_size;
     struct sockaddr_in server_addr, client_addr;
@@ -110,19 +111,35 @@ char * c_vk_listen_for_code()
         return NULL;
     }
     //printf("Msg from client: %s\n", client_message);
+		char *html = strndup(client_message, 2000);
+
+		// Respond to client:
+    strcpy(server_message, "Done! You have got authorization code!");
+		send(client_sock, server_message, strlen(server_message), 0);
+
+    // Closing the socket:
+    close(client_sock);
+    close(socket_desc);
+
+    return html;
+}
+
+
+char * c_vk_listen_for_code(){
+		char *html = c_vk_listner();
+		if (!html)
+			return NULL;
 
 		//find start of verification code
 		const char * pattern = "code="; 
 		int len = strlen(pattern);
-		int start = strfnd(client_message, pattern); 
+		int start = strfnd(html, pattern); 
 		if (start < 0){
       perror("Couldn't find verification code in message\n");
-			close(client_sock);
-			close(socket_desc);
 			return NULL;
 		}
 		//find end of code
-		long end = strfnd(&client_message[start], " ");
+		long end = strfnd(&html[start], " ");
 
 		//find length of verification code
 		long clen = end - len;
@@ -131,22 +148,14 @@ char * c_vk_listen_for_code()
 		char * code = malloc(clen + 1);
 		if (!code){
 			perror("malloc");
-			close(client_sock);
-			close(socket_desc);
 			return NULL;
 		}
-		strncpy(code, &client_message[start + len], clen);
+		strncpy(code, &html[start + len], clen);
 		code[clen] = 0;
 
-    // Respond to client:
-    strcpy(server_message, "Done! You have got authorization code!");
-
-    // Closing the socket:
-    close(client_sock);
-    close(socket_desc);
-
-    return code;
+		return code;
 }
+
 struct string {
 	char *ptr;
 	size_t len;
@@ -154,14 +163,22 @@ struct string {
 
 static void init_string(struct string *s) {
 	s->len = 0;
-	s->ptr = MALLOC(s->len+1);
+	s->ptr = malloc(s->len+1);
+	if (!s->ptr){
+		perror("malloc");
+		return;
+	}
 	s->ptr[0] = '\0';
 }
 
 static size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s)
 {
 	size_t new_len = s->len + size*nmemb;
-	s->ptr = REALLOC(s->ptr, new_len+1);
+	s->ptr = realloc(s->ptr, new_len+1);
+	if (!s->ptr){
+		perror("realloc");
+		return 0;
+	}
 	memcpy(s->ptr+s->len, ptr, size*nmemb);
 	s->ptr[new_len] = '\0';
 	s->len = new_len;

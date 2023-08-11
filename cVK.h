@@ -2,7 +2,7 @@
  * File              : cVK.h
  * Author            : Igor V. Sementsov <ig.kuzm@gmail.com>
  * Date              : 11.08.2023
- * Last Modified Date: 11.08.2023
+ * Last Modified Date: 12.08.2023
  * Last Modified By  : Igor V. Sementsov <ig.kuzm@gmail.com>
  */
 
@@ -19,7 +19,7 @@ extern "C" {
 /*
  * To create new application visit https://vk.com/apps
  * Set Open API ON, basic domen to localhost
- * and addres like 'localhost:2000'
+ * and addres like 'http://localhost:2000'
  */
 
 /*
