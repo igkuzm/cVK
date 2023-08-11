@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <curl/curl.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 
 #include "strfind.h"
 #include "uuid4.h"
@@ -27,7 +29,7 @@ char * strptime(const char* s, const char* f, struct tm* tm);#endif
 //#define API_URL "https://cloud-api.yandex.net"
 
 #define VERIFY_SSL 0
-#define YD_ANSWER_LIMIT 20
+#define ANSWER_LIMIT 20
 
 //memory allocation helpers
 #define MALLOC(size) ({void* const ___p = malloc(size); if(!___p) {perror("Malloc"); exit(EXIT_FAILURE);} ___p;})
@@ -45,52 +47,106 @@ char * c_vk_url_to_ask_for_verification_code(
 		uint32_t access_rights) //https://dev.vk.com/references/access-rights
 {
 	char *requestString = MALLOC(BUFSIZ);
-	sprintf(requestString, "%s?response_type=code&client_id=%s&v=%s&scope=%u", 
-			OAUTH_URL, client_id, API_VERS, access_rights);	
+	sprintf(requestString, "%s?client_id=%s&display=mobile&redirect_uri=localhost:%d&scope=%d&v=%s", 
+			OAUTH_URL, client_id, DEFAULT_PORT, access_rights, API_VERS);	
 	
 	return requestString;
 }
 
-char * c_vk_verification_code_from_html(
-		const char *html,     //html to search verification code
-		char **error		      //error
-		)
+char * c_vk_listen_for_code()
 {
-	const char * patterns[] = {
-		"verification_code%3Fcode%3D",
-		"class=\"verification-code-code\">"
-	};
-	const char *pattern_ends[] = {
-		"&",
-		"<"
-	};	
+    int socket_desc, client_sock, client_size;
+    struct sockaddr_in server_addr, client_addr;
+    char server_message[2000], client_message[2000];
 
-	int i;
-	for (int i = 0; i < 2; i++) {
-		const char * s = patterns[i]; 
-		int len = strlen(s);
+    // Clean buffers:
+    memset(server_message, '\0', sizeof(server_message));
+    memset(client_message, '\0', sizeof(client_message));
 
-		//find start of verification code class structure in html
-		long start = strfnd(html, s); 
-		if (start < 0)
-			ERRORSTR(error, "HTML has no verification code class");
-		else {
-			//find end of code
-			long end = strfnd(&html[start], pattern_ends[i]);
+    // Create socket:
+    socket_desc = socket(AF_INET, SOCK_STREAM, 0);
 
-			//find length of verification code
-			long clen = end - len;
+    if(socket_desc < 0){
+        perror("Error while creating socket\n");
+        return NULL;
+    }
+    //printf("Socket created successfully\n");
 
-			//allocate code and copy
-			char * code = MALLOC(clen + 1);
-			strncpy(code, &html[start + len], clen);
+    // Set port and IP:
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(DEFAULT_PORT);
+    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-			return code;
+    // Bind to the set port and IP:
+    if(bind(socket_desc, (struct sockaddr*)&server_addr, sizeof(server_addr))<0){
+        perror("Couldn't bind to the port\n");
+        return NULL;
+    }
+    //printf("Done with binding\n");
+
+    // Listen for clients:
+    if(listen(socket_desc, 1) < 0){
+        perror("Error while listening\n");
+        return NULL;
+    }
+    //printf("\nListening for incoming connections.....\n");
+
+    // Accept an incoming connection:
+    client_size = sizeof(client_addr);
+    client_sock = accept(socket_desc, (struct sockaddr*)&client_addr, &client_size);
+
+    if (client_sock < 0){
+        printf("Can't accept\n");
+				close(socket_desc);
+        return NULL;
+    }
+    //printf("Client connected at IP: %s and port: %i\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+
+    // Receive client's message:
+    if (recv(client_sock, client_message, sizeof(client_message), 0) < 0){
+        perror("Couldn't receive\n");
+				close(client_sock);
+				close(socket_desc);
+        return NULL;
+    }
+    //printf("Msg from client: %s\n", client_message);
+
+		//find start of verification code
+		const char * pattern = "code="; 
+		int len = strlen(pattern);
+		int start = strfnd(client_message, pattern); 
+		if (start < 0){
+      perror("Couldn't find verification code in message\n");
+			close(client_sock);
+			close(socket_desc);
+			return NULL;
 		}
-	}
-	return NULL;
-}
+		//find end of code
+		long end = strfnd(&client_message[start], " ");
 
+		//find length of verification code
+		long clen = end - len;
+
+		//allocate code and copy
+		char * code = malloc(clen + 1);
+		if (!code){
+			perror("malloc");
+			close(client_sock);
+			close(socket_desc);
+			return NULL;
+		}
+		strncpy(code, &client_message[start + len], clen);
+		code[clen] = 0;
+
+    // Respond to client:
+    strcpy(server_message, "Done! You have got authorization code!");
+
+    // Closing the socket:
+    close(client_sock);
+    close(socket_desc);
+
+    return code;
+}
 struct string {
 	char *ptr;
 	size_t len;

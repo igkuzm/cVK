@@ -16,6 +16,19 @@ extern "C" {
 #include <stdint.h>
 #include <time.h>
 
+/*
+ * To create new application visit https://vk.com/apps
+ * Set Open API ON, basic domen to localhost
+ * and addres like 'localhost:2000'
+ */
+
+/*
+ * to get access_token, first get verification code with
+ * c_vk_listen_for_code and open result url of c_vk_url_to_ask_for_verification_code
+ * with browser
+ * After you've got verification code, start c_vk_get_token
+ */
+
 // https://dev.vk.com/references/access-rights
 // ACCESS-RIGHTS FOR USER
 #define AR_NOTIFY       1<<0
@@ -48,21 +61,21 @@ extern "C" {
 #define ARG_DOCS        1<<17
 #define ARG_MANAGE      1<<18
 
+#define DEFAULT_PORT 2000
 
 // return allocated null-terminated string with url to pass OAuth verification
 char * c_vk_url_to_ask_for_verification_code(
 		const char *client_id,  
 		uint32_t access_rights); //https://dev.vk.com/references/access-rights
 
-// search html string for verification code 
+// open socket at DEFAULT_PORT and listen
+// for verification code 
 // in success return allocated null-terminated string 
 // with code, otherwice return NULL 
-char * c_vk_verification_code_from_html(
-		const char *html,     //html to search verification code
-		char **error);	      
+char * c_vk_listen_for_code();
 
 // callback acces token
-void c_yandex_disk_get_token(
+void c_vk_get_token(
 		const char *verification_code, 
 		const char *client_id,         // get in https://vk.com/apps
 		const char *client_secret,     // get in https://vk.com/apps
