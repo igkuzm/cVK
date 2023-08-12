@@ -155,7 +155,8 @@ c_vk_listner_in_thread(void *params)
 {
 	struct c_vk_oauth_params *p = params;
 	
-	char *answer = c_vk_listner(p->user_data, p->callback);
+	char *answer = 
+			c_vk_listner(p->user_data, p->callback);
 	if (!answer)
 		return NULL;	
 	
@@ -172,7 +173,7 @@ c_vk_listner_killer(void *params)
 		sleep(10);
 	}
 	pthread_cancel(p->tid);
-	pthread_exit(NULL);
+	pthread_exit(0);
 }
 
 static char * 
@@ -228,7 +229,8 @@ c_vk_listner_for_code(
 	int err = pthread_join(t, &_answer);
 	
 	// no need killer any more
-	pthread_cancel(k);
+	if (pthread_join(k, NULL) == 0)
+			pthread_cancel(k);
 	
 	if (err){
 		callback(user_data, NULL, 0, NULL, 
@@ -268,7 +270,6 @@ c_vk_listner_for_code(
 	return code;
 }
 
-
 struct string {
 	char *ptr;
 	size_t len;
@@ -290,7 +291,6 @@ static size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s)
 
 	return size*nmemb;
 }
-
 
 // callback acces token
 void c_vk_get_token(

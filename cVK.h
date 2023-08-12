@@ -2,7 +2,7 @@
  * File              : cVK.h
  * Author            : Igor V. Sementsov <ig.kuzm@gmail.com>
  * Date              : 11.08.2023
- * Last Modified Date: 12.08.2023
+ * Last Modified Date: 13.08.2023
  * Last Modified By  : Igor V. Sementsov <ig.kuzm@gmail.com>
  */
 
@@ -72,7 +72,8 @@ char * c_vk_auth_url(
 		);
 
 /* launch listner on DEFAULT_PORT to catch authorization code
- * and change it to token. To stop function execution
+ * and change it to token. Every 10 seconds listner will return
+ * status message in callback. To stop function execution
  * return non-zero in callback */
 void c_vk_get_token(
 		const char *client_id,         // get in https://vk.com/apps
