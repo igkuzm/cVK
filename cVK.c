@@ -217,7 +217,7 @@ c_vk_listner_for_code(
 	};
 	
 	if (pthread_create(&k,&ka, 
-				c_vk_listner_in_thread, &p)){
+				c_vk_listner_killer, &p)){
 		callback(user_data, NULL, 0, NULL, 
 				"Can't create thread");
 		pthread_cancel(t);
