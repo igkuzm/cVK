@@ -14,19 +14,22 @@ extern "C" {
 #endif
 
 #include <stdint.h>
-#include <time.h>
 
+#define  VERIFY_SSL 0
+#define DEFAULT_PORT 2000
 /*
  * To create new application visit https://vk.com/apps
  * Set Open API ON, basic domen to localhost
  * and addres like 'http://localhost:2000'
+ * You will get client_id and client_secret
  */
 
 /*
- * to get access_token, first get verification code with
- * c_vk_listen_for_code and open result url of c_vk_url_to_ask_for_verification_code
- * with browser
- * After you've got verification code, start c_vk_get_token
+ * To get access_token: 
+ *		1. Get verification code url with c_vk_auth_url. 
+ *		2. Start c_vk_get_token to listen DEFAULT_PORT
+ *		3. User application should open url in browser, authorise
+ *			 and c_vk_get_token will catch the token
  */
 
 // https://dev.vk.com/references/access-rights
@@ -61,31 +64,27 @@ extern "C" {
 #define ARG_DOCS        1<<17
 #define ARG_MANAGE      1<<18
 
-#define DEFAULT_PORT 2000
+/* return allocated c null-terminated string with 
+ * authorisation URL or NULL on error*/
+char * c_vk_auth_url(
+		const char *client_id,
+		uint32_t access_rights //https://dev.vk.com/references/access-rights
+		);
 
-// return allocated null-terminated string with url to pass OAuth verification
-char * c_vk_url_to_ask_for_verification_code(
-		const char *client_id,  
-		uint32_t access_rights); //https://dev.vk.com/references/access-rights
-
-// open socket at DEFAULT_PORT and listen
-// for verification code 
-// in success return allocated null-terminated string 
-// with code, otherwice return NULL 
-char * c_vk_listen_for_code();
-
-// callback acces token
+/* launch listner on DEFAULT_PORT to catch authorization code
+ * and change it to token. To stop function execution
+ * return non-zero in callback */
 void c_vk_get_token(
-		const char *verification_code, 
 		const char *client_id,         // get in https://vk.com/apps
 		const char *client_secret,     // get in https://vk.com/apps
 		void * user_data,
 		int (*callback)(
 			void * user_data,
 			const char * access_token,
-			time_t expires_in,
+			int expires_in,              // seconds of token life - 0 for immortal
 			const char * user_id,
-			const char * error));
+			const char * error)
+		);
 
 #ifdef __cplusplus
 }  /* end of the 'extern "C"' block */
