@@ -179,7 +179,17 @@ c_vk_listner_killer(void *params)
 		{
 			p->callback(p->user_data, NULL, 0, NULL,
 					"callback return non zero - close connection");
-			pthread_kill(p->tid);
+			// stop socket
+			int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+			
+			struct sockaddr_in sin;
+			sin.sin_family = AF_INET;
+			sin.sin_port = htons(DEFAULT_PORT);
+			sin.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+			if (connect(sockfd, (struct sockaddr *)&sin, 
+						sizeof(sin)) == -1) {
+			}
 			break;
 		}
 	
