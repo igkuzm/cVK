@@ -2,7 +2,7 @@
  * File              : cVK.c
  * Author            : Igor V. Sementsov <ig.kuzm@gmail.com>
  * Date              : 11.08.2023
- * Last Modified Date: 12.08.2023
+ * Last Modified Date: 13.08.2023
  * Last Modified By  : Igor V. Sementsov <ig.kuzm@gmail.com>
  */
 
@@ -244,6 +244,28 @@ c_vk_listner_for_token(
 	return tid;
 }
 
+struct string {
+	char *ptr;
+	size_t len;
+};
+
+void init_string(struct string *s) {
+	s->len = 0;
+	s->ptr = malloc(s->len+1);
+	s->ptr[0] = '\0';
+}
+
+size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s)
+{
+	size_t new_len = s->len + size*nmemb;
+	s->ptr = realloc(s->ptr, new_len+1);
+	memcpy(s->ptr+s->len, ptr, size*nmemb);
+	s->ptr[new_len] = '\0';
+	s->len = new_len;
+
+	return size*nmemb;
+}
+
 
 // callback acces token
 void c_vk_get_token(
@@ -294,16 +316,22 @@ void c_vk_get_token(
 		return;
 	}
 
-	char s[BUFSIZ];
-	sprintf(s, 
+	struct string s;
+	init_string(&s);
+	
+	char str[BUFSIZ];
+	sprintf(str, 
 		"%s?client_id=%s&client_secret=%s&"
 		"redirect_uri=http://localhost:%d&code=%s", 
 		TOKEN_URL, client_id, client_secret, DEFAULT_PORT, code);	
 	
-	curl_easy_setopt(curl, CURLOPT_URL, s);
+	curl_easy_setopt(curl, CURLOPT_URL, str);
 	curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "GET");		
 	curl_easy_setopt(curl, CURLOPT_HEADER, 0);
 
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+	
 	struct curl_slist *header = NULL;
 	header = curl_slist_append(header, "Connection: close");		
 	header = curl_slist_append(header, 
@@ -313,6 +341,8 @@ void c_vk_get_token(
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, VERIFY_SSL);		
 
 	CURLcode res = curl_easy_perform(curl);
+
+	printf("cURL returned: %s\n", s.ptr);
 
 	if (res) { //handle erros
 		callback(user_data, NULL, 0, NULL, curl_easy_strerror(res));
