@@ -304,10 +304,10 @@ void c_vk_get_token(
 	printf("CODE: %s\n", code);
 
 	// start token listner in thread
-	pthread_t tid = 
-			c_vk_listner_for_token(user_data, callback);
-	if (!tid)
-		return;
+	//pthread_t tid = 
+			//c_vk_listner_for_token(user_data, callback);
+	//if (!tid)
+		//return;
 
 	// ask token
 	CURL *curl = curl_easy_init();
@@ -354,8 +354,8 @@ void c_vk_get_token(
 	curl_slist_free_all(header);
 
 	// wait process in thread
-	if (pthread_join(tid, NULL)){
+	//if (pthread_join(tid, NULL)){
 		// handle thread errors
 
-	}
+	//}
 }
