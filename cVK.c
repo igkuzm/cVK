@@ -110,8 +110,8 @@ static char * c_vk_listner(
 				close(socket_desc);
         return NULL;
     }
-    printf("Msg from client: %s\n", client_message);
-		char *html = strndup(client_message, sizeof(client_message) - 1);
+    //printf("Msg from client: %s\n", client_message);
+		char *answer = strndup(client_message, sizeof(client_message) - 1);
 		client_message[sizeof(client_message)-1] = 0;
 
 		// Respond to client:
@@ -122,7 +122,7 @@ static char * c_vk_listner(
     close(client_sock);
     close(socket_desc);
 
-    return html;
+    return answer;
 }
 
 static long 
@@ -325,8 +325,6 @@ void c_vk_get_token(
 	char *code = c_vk_listner_for_code(user_data, callback);
 	if (!code)
 		return;
-
-	printf("CODE: %s\n", code);
 
 	// ask token
 	CURL *curl = curl_easy_init();
