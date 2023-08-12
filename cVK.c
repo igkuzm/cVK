@@ -148,6 +148,7 @@ struct c_vk_oauth_params {
 			const char * error
 			);
 		pthread_t tid;
+		int exit;
 };
 
 static void * 
@@ -167,12 +168,16 @@ static void *
 c_vk_listner_killer(void *params)
 {
 	struct c_vk_oauth_params *p = params;
-	while (p->callback(p->user_data, NULL, 0, NULL,
-				"waiting connection...") == 0)
-	{
+	while (p->exit == 0){
+		if (p->callback(p->user_data, NULL, 0, NULL,
+					"waiting connection...")){
+			pthread_cancel(p->tid);
+			break;
+		}
+	
 		sleep(10);
 	}
-	pthread_cancel(p->tid);
+	free(p);
 	pthread_exit(0);
 }
 
@@ -209,6 +214,7 @@ c_vk_listner_for_code(
 	p->user_data = user_data;
 	p->callback = callback;
 	p->tid = t;
+	p->exit = 0;
 	
 	//создаем новый поток
 	if (pthread_create(&t,&ta, 
@@ -238,8 +244,7 @@ c_vk_listner_for_code(
 	int err = pthread_join(t, &_answer);
 	
 	// no need killer any more
-	//pthread_cancel(k);
-	//free(p);
+	p->exit = 1;
 	
 	if (err){
 		callback(user_data, NULL, 0, NULL, 
