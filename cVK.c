@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <curl/curl.h>
@@ -109,7 +110,7 @@ static char * c_vk_listner(
 				close(socket_desc);
         return NULL;
     }
-    //printf("Msg from client: %s\n", client_message);
+    printf("Msg from client: %s\n", client_message);
 		char *html = strndup(client_message, sizeof(client_message) - 1);
 		client_message[sizeof(client_message)-1] = 0;
 
@@ -137,48 +138,136 @@ _strfnd(
 	return -1;
 }
 
-static char * c_vk_listen_for_code(
-		void * user_data,
+struct c_vk_oauth_params {
+		void * user_data;
 		int (*callback)(
 			void * user_data,
 			const char * access_token,
 			int expires_in,
 			const char * user_id,
 			const char * error
-			)
-		)
+			);
+		pthread_t tid;
+};
+
+static void * 
+c_vk_listner_in_thread(void *params)
 {
-		char *html = c_vk_listner(user_data, callback);
-		if (!html)
-			return NULL;
-
-		//find start of verification code
-		const char * pattern = "code="; 
-		int len = strlen(pattern);
-		int start = _strfnd(html, pattern); 
-		if (start < 0){
-			callback(user_data, NULL, 0, NULL,
-					"Couldn't find verification code in message");
-			return NULL;
-		}
-		//find end of code
-		long end = _strfnd(&html[start], " ");
-
-		//find length of verification code
-		long clen = end - len;
-
-		//allocate code and copy
-		char * code = malloc(clen + 1);
-		if (!code){
-			callback(user_data, NULL, 0, NULL,
-					"error memory allocation");
-			return NULL;
-		}
-		strncpy(code, &html[start + len], clen);
-		code[clen] = 0;
-
-		return code;
+	struct c_vk_oauth_params *p = params;
+	
+	char *answer = c_vk_listner(p->user_data, p->callback);
+	if (!answer)
+		return NULL;	
+	
+	return answer;	
 }
+
+static void * 
+c_vk_listner_killer(void *params)
+{
+	struct c_vk_oauth_params *p = params;
+	while (p->callback(p->user_data, NULL, 0, NULL,
+				"waiting connection...") == 0)
+	{
+		sleep(10);
+	}
+	pthread_cancel(p->tid);
+	pthread_exit(NULL);
+}
+
+static char * 
+c_vk_listner_for_code(
+		void * user_data,
+		int (*callback)(
+			void * user_data,
+			const char * access_token,
+			int expires_in,
+			const char * user_id,
+			const char * error))
+{
+
+	// create thread to get code and killer to catch callback
+	pthread_t t, k;       
+	pthread_attr_t ta, ka; 
+
+	//получаем дефолтные значения атрибутов
+	if(pthread_attr_init(&ta)){
+		callback(user_data, NULL, 0, NULL, 
+				"Can't set thread attributes");
+		return NULL;
+	};
+	
+	struct c_vk_oauth_params p =
+			{user_data, callback, t};
+	
+	//создаем новый поток
+	if (pthread_create(&t,&ta, 
+				c_vk_listner_in_thread, &p)){
+		callback(user_data, NULL, 0, NULL, 
+				"Can't create thread");
+		return NULL;
+	}
+
+	//create thread killer
+	if(pthread_attr_init(&ka)){
+		callback(user_data, NULL, 0, NULL, 
+				"Can't set thread attributes");
+		pthread_cancel(t);
+		return NULL;
+	};
+	
+	if (pthread_create(&k,&ka, 
+				c_vk_listner_in_thread, &p)){
+		callback(user_data, NULL, 0, NULL, 
+				"Can't create thread");
+		pthread_cancel(t);
+		return NULL;
+	}
+
+	void *_answer = NULL;
+	int err = pthread_join(t, &_answer);
+	
+	// no need killer any more
+	pthread_cancel(k);
+	
+	if (err){
+		callback(user_data, NULL, 0, NULL, 
+				"thread returned error");
+		return NULL;
+	}
+
+	char *answer = _answer;
+	if (!answer)
+		return NULL;
+
+	//find start of verification code
+	const char * pattern = "code="; 
+	int len = strlen(pattern);
+	int start = _strfnd(answer, pattern); 
+	if (start < 0){
+		callback(user_data, NULL, 0, NULL,
+				"Couldn't find verification code in message");
+		return NULL;
+	}
+	//find end of code
+	long end = _strfnd(&answer[start], " ");
+
+	//find length of verification code
+	long clen = end - len;
+
+	//allocate code and copy
+	char * code = malloc(clen + 1);
+	if (!code){
+		callback(user_data, NULL, 0, NULL,
+				"error memory allocation");
+		return NULL;
+	}
+	strncpy(code, &answer[start + len], clen);
+	code[clen] = 0;
+
+	return code;
+}
+
 
 struct string {
 	char *ptr;
@@ -233,9 +322,11 @@ void c_vk_get_token(
 	}
 
 	// listen for code
-	char *code = c_vk_listen_for_code(user_data, callback);
+	char *code = c_vk_listner_for_code(user_data, callback);
 	if (!code)
 		return;
+
+	printf("CODE: %s\n", code);
 
 	// ask token
 	CURL *curl = curl_easy_init();
