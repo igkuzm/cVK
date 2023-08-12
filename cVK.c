@@ -198,8 +198,17 @@ c_vk_listner_for_code(
 		return NULL;
 	};
 	
-	struct c_vk_oauth_params p =
-			{user_data, callback, t};
+	struct c_vk_oauth_params *p =
+			malloc(sizeof(struct c_vk_oauth_params));
+	if(!p){
+		callback(user_data, NULL, 0, NULL, 
+				"Can't allocate memory");
+		pthread_cancel(t);
+		return NULL;
+	}
+	p->user_data = user_data;
+	p->callback = callback;
+	p->tid = t;
 	
 	//создаем новый поток
 	if (pthread_create(&t,&ta, 
@@ -230,6 +239,7 @@ c_vk_listner_for_code(
 	
 	// no need killer any more
 	//pthread_cancel(k);
+	//free(p);
 	
 	if (err){
 		callback(user_data, NULL, 0, NULL, 
@@ -277,6 +287,10 @@ struct string {
 static void init_string(struct string *s) {
 	s->len = 0;
 	s->ptr = malloc(s->len+1);
+	if (!s->ptr){
+		perror("malloc");
+		return;
+	}
 	s->ptr[0] = '\0';
 }
 
@@ -284,6 +298,10 @@ static size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s)
 {
 	size_t new_len = s->len + size*nmemb;
 	s->ptr = realloc(s->ptr, new_len+1);
+	if (!s->ptr){
+		perror("realloc");
+		return 0;
+	}
 	memcpy(s->ptr+s->len, ptr, size*nmemb);
 	s->ptr[new_len] = '\0';
 	s->len = new_len;
