@@ -189,7 +189,12 @@ c_vk_listner_killer(void *params)
 
 			if (connect(sockfd, (struct sockaddr *)&sin, 
 						sizeof(sin)) == -1) {
+				p->callback(p->user_data, NULL, 0, NULL,
+						"can't connect to socket");
+				break;
 			}
+			char msg[] = "stop";
+			send(sockfd, msg, strlen(msg), 0);
 			break;
 		}
 	
