@@ -279,6 +279,8 @@ void c_vk_get_token(
 	if (!code)
 		return;
 
+	printf("CODE: %s\n", code);
+
 	// start token listner in thread
 	pthread_t tid = 
 			c_vk_listner_for_token(user_data, callback);
