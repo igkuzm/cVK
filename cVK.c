@@ -109,7 +109,7 @@ static char * c_vk_listner(
 				close(socket_desc);
         return NULL;
     }
-    printf("Msg from client: %s\n", client_message);
+    //printf("Msg from client: %s\n", client_message);
 		char *html = strndup(client_message, sizeof(client_message) - 1);
 		client_message[sizeof(client_message)-1] = 0;
 
@@ -136,8 +136,6 @@ _strfnd(
 		return p - haystack;
 	return -1;
 }
-
-
 
 static char * c_vk_listen_for_code(
 		void * user_data,
@@ -182,80 +180,18 @@ static char * c_vk_listen_for_code(
 		return code;
 }
 
-struct c_vk_oauth_params {
-		void * user_data;
-		int (*callback)(
-			void * user_data,
-			const char * access_token,
-			int expires_in,
-			const char * user_id,
-			const char * error
-			);
-};
-
-static void * 
-c_vk_listner_for_token_in_thread(void *params)
-{
-	struct c_vk_oauth_params *p = params;
-	
-	char *html = c_vk_listner(p->user_data, p->callback);
-	if (!html)
-		pthread_exit(0);	
-
-	char access_token[256], user_id[16];
-	int expires_in = 0;
-
-
-	pthread_exit(0);	
-}
-
-static pthread_t 
-c_vk_listner_for_token(
-		void * user_data,
-		int (*callback)(
-			void * user_data,
-			const char * access_token,
-			int expires_in,
-			const char * user_id,
-			const char * error))
-{
-
-	pthread_t tid;       //идентификатор потока
-	pthread_attr_t attr; //атрибуты потока
-
-	//получаем дефолтные значения атрибутов
-	if(pthread_attr_init(&attr)){
-		callback(user_data, NULL, 0, NULL, 
-				"Can't set thread attributes");
-		return 0;
-	};
-	
-	struct c_vk_oauth_params p =
-			{user_data, callback};
-	
-	//создаем новый поток
-	if (pthread_create(&tid,&attr, 
-				c_vk_listner_for_token_in_thread, &p)){
-		callback(user_data, NULL, 0, NULL, 
-				"Can't create thread");
-		return 0;
-	}
-
-	return tid;
-}
-
 struct string {
 	char *ptr;
 	size_t len;
 };
 
-void init_string(struct string *s) {
+static void init_string(struct string *s) {
 	s->len = 0;
 	s->ptr = malloc(s->len+1);
 	s->ptr[0] = '\0';
 }
 
-size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s)
+static size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s)
 {
 	size_t new_len = s->len + size*nmemb;
 	s->ptr = realloc(s->ptr, new_len+1);
@@ -301,14 +237,6 @@ void c_vk_get_token(
 	if (!code)
 		return;
 
-	printf("CODE: %s\n", code);
-
-	// start token listner in thread
-	//pthread_t tid = 
-			//c_vk_listner_for_token(user_data, callback);
-	//if (!tid)
-		//return;
-
 	// ask token
 	CURL *curl = curl_easy_init();
 	if (!curl){
@@ -342,8 +270,6 @@ void c_vk_get_token(
 
 	CURLcode res = curl_easy_perform(curl);
 
-	printf("cURL returned: %s\n", s.ptr);
-
 	if (res) { //handle erros
 		callback(user_data, NULL, 0, NULL, curl_easy_strerror(res));
 		curl_easy_cleanup(curl);
@@ -353,9 +279,40 @@ void c_vk_get_token(
 	curl_easy_cleanup(curl);
 	curl_slist_free_all(header);
 
-	// wait process in thread
-	//if (pthread_join(tid, NULL)){
-		// handle thread errors
-
-	//}
+	cJSON *json = cJSON_ParseWithLength(s.ptr, s.len);
+	if (!json){
+		char str[BUFSIZ];
+		sprintf(str, "Can't parse json. cURL retune: %s", s.ptr);
+		callback(user_data, NULL, 0, NULL, str);
+		free(s.ptr);
+		return;			
+	}
+	free(s.ptr);
+	if (cJSON_IsObject(json)) {
+			cJSON *access_token = 
+					cJSON_GetObjectItem(json, "access_token");			
+			if (!access_token) { //handle errors
+				cJSON *error_description = 
+						cJSON_GetObjectItem(json, "error_description");
+				if (!error_description) {
+					//no error code in JSON answer
+					callback(user_data, NULL, 0, NULL, "unknown error!"); 
+					cJSON_free(json);
+					return;
+				}
+				callback(user_data, NULL, 0, NULL, error_description->valuestring);
+				cJSON_free(json);
+				return;
+			}
+			//OK - we have a token
+			callback(
+					user_data, 
+					access_token->valuestring, 
+					cJSON_GetObjectItem(json, "expires_in") ?		
+							cJSON_GetObjectItem(json, "expires_in")->valueint : 0, 
+					cJSON_GetObjectItem(json, "user_id") ? 
+							cJSON_GetObjectItem(json, "user_id")->valuestring : NULL, 
+					NULL);
+			cJSON_free(json);
+		}	
 }
