@@ -24,7 +24,7 @@
 
 char * c_vk_auth_url(
 		const char *client_id,  
-		uint32_t access_rights) //https://dev.vk.com/references/access-rights
+		uint32_t access_rights)
 {
 	char *s = malloc(BUFSIZ);
 	if (!s){
@@ -100,10 +100,13 @@ static char * c_vk_listner(
 				close(socket_desc);
         return NULL;
     }
-    //printf("Client connected at IP: %s and port: %i\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+    //printf("Client connected at IP: %s and port: %i\n", 
+		//inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
 
     // Receive client's message:
-    if (recv(client_sock, client_message, sizeof(client_message), 0) < 0){
+    if (recv(client_sock, client_message, 
+					sizeof(client_message), 0) < 0)
+		{
 				callback(user_data, NULL, 0, NULL,
 						"Couldn't receive incoming message");
 				close(client_sock);
@@ -111,12 +114,14 @@ static char * c_vk_listner(
         return NULL;
     }
     //printf("Msg from client: %s\n", client_message);
-		char *answer = strndup(client_message, sizeof(client_message) - 1);
+		char *answer = strndup(client_message, 
+				sizeof(client_message) - 1);
 		client_message[sizeof(client_message)-1] = 0;
 
 		// Respond to client:
     strcpy(server_message, "Done!");
-		send(client_sock, server_message, strlen(server_message), 0);
+		send(client_sock, server_message, 
+				strlen(server_message), 0);
 
     // Closing the socket:
     close(client_sock);
@@ -170,8 +175,11 @@ c_vk_listner_killer(void *params)
 	struct c_vk_oauth_params *p = params;
 	while (p->exit == 0){
 		if (p->callback(p->user_data, NULL, 0, NULL,
-					"waiting connection...")){
-			pthread_cancel(p->tid);
+					"waiting connection..."))
+		{
+			p->callback(p->user_data, NULL, 0, NULL,
+					"callback return non zero - close connection");
+			pthread_kill(p->tid);
 			break;
 		}
 	
@@ -300,7 +308,8 @@ static void init_string(struct string *s) {
 	s->ptr[0] = '\0';
 }
 
-static size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s)
+static size_t writefunc(void *ptr, size_t size, 
+		size_t nmemb, struct string *s)
 {
 	size_t new_len = s->len + size*nmemb;
 	s->ptr = realloc(s->ptr, new_len+1);
@@ -394,7 +403,7 @@ void c_vk_get_token(
 	cJSON *json = cJSON_ParseWithLength(s.ptr, s.len);
 	if (!json){
 		char str[BUFSIZ];
-		sprintf(str, "Can't parse json. cURL retune: %s", s.ptr);
+		sprintf(str, "Can't parse json. cURL returns: %s", s.ptr);
 		callback(user_data, NULL, 0, NULL, str);
 		free(s.ptr);
 		return;			
@@ -412,7 +421,8 @@ void c_vk_get_token(
 					cJSON_free(json);
 					return;
 				}
-				callback(user_data, NULL, 0, NULL, error_description->valuestring);
+				callback(user_data, NULL, 0, NULL, 
+						error_description->valuestring);
 				cJSON_free(json);
 				return;
 			}
@@ -421,9 +431,11 @@ void c_vk_get_token(
 					user_data, 
 					access_token->valuestring, 
 					cJSON_GetObjectItem(json, "expires_in") ?		
-							cJSON_GetObjectItem(json, "expires_in")->valueint : 0, 
+							cJSON_GetObjectItem(json, "expires_in")->valueint 
+							: 0, 
 					cJSON_GetObjectItem(json, "user_id") ? 
-							cJSON_GetObjectItem(json, "user_id")->valuestring : NULL, 
+							cJSON_GetObjectItem(json, "user_id")->valuestring 
+							: NULL, 
 					NULL);
 			cJSON_free(json);
 		}	
