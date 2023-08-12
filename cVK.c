@@ -229,8 +229,7 @@ c_vk_listner_for_code(
 	int err = pthread_join(t, &_answer);
 	
 	// no need killer any more
-	if (pthread_join(k, NULL) == 0)
-			pthread_cancel(k);
+	//pthread_cancel(k);
 	
 	if (err){
 		callback(user_data, NULL, 0, NULL, 
