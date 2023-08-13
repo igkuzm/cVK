@@ -77,6 +77,13 @@ static char * c_vk_listner(
     //server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
     server_addr.sin_addr.s_addr = INADDR_LOOPBACK;
 
+#ifdef __APPLE__
+		// Set socket options
+		char sockopt = 1;
+		setsockopt(socket_desc, SOL_SOCKET, 
+				SO_USELOOPBACK, &sockopt, sizeof(sockopt));
+#endif
+
     // Bind to the set port and IP:
     if(bind(socket_desc, (struct sockaddr*)&server_addr, 
 					sizeof(server_addr))<0){
