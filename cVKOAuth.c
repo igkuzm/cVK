@@ -10,7 +10,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <curl/curl.h>
@@ -24,7 +23,7 @@
 
 char * c_vk_auth_url(
 		const char *client_id,  
-		uint32_t access_rights)
+		uint32_t access_rights) //https://dev.vk.com/references/access-rights
 {
 	char *s = malloc(BUFSIZ);
 	if (!s){
@@ -41,7 +40,7 @@ char * c_vk_auth_url(
 
 static char * c_vk_listner(
 		void * user_data,
-		int (*callback)(
+		void (*callback)(
 			void * user_data,
 			const char * access_token,
 			int expires_in,
@@ -100,13 +99,10 @@ static char * c_vk_listner(
 				close(socket_desc);
         return NULL;
     }
-    //printf("Client connected at IP: %s and port: %i\n", 
-		//inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+    //printf("Client connected at IP: %s and port: %i\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
 
     // Receive client's message:
-    if (recv(client_sock, client_message, 
-					sizeof(client_message), 0) < 0)
-		{
+    if (recv(client_sock, client_message, sizeof(client_message), 0) < 0){
 				callback(user_data, NULL, 0, NULL,
 						"Couldn't receive incoming message");
 				close(client_sock);
@@ -114,24 +110,22 @@ static char * c_vk_listner(
         return NULL;
     }
     //printf("Msg from client: %s\n", client_message);
-		char *answer = strndup(client_message, 
-				sizeof(client_message) - 1);
+		char *html = strndup(client_message, sizeof(client_message) - 1);
 		client_message[sizeof(client_message)-1] = 0;
 
 		// Respond to client:
     strcpy(server_message, "Done!");
-		send(client_sock, server_message, 
-				strlen(server_message), 0);
+		send(client_sock, server_message, strlen(server_message), 0);
 
     // Closing the socket:
     close(client_sock);
     close(socket_desc);
 
-    return answer;
+    return html;
 }
 
 static long 
-_strfnd( 
+strfnd( 
 		const char * haystack, 
 		const char * needle
 		)
@@ -143,169 +137,47 @@ _strfnd(
 	return -1;
 }
 
-struct c_vk_oauth_params {
-		void * user_data;
-		int (*callback)(
+static char * c_vk_listen_for_code(
+		void * user_data,
+		void (*callback)(
 			void * user_data,
 			const char * access_token,
 			int expires_in,
 			const char * user_id,
 			const char * error
-			);
-		pthread_t tid;
-		int exit;
-};
-
-static void * 
-c_vk_listner_in_thread(void *params)
+			)
+		)
 {
-	struct c_vk_oauth_params *p = params;
-	
-	char *answer = 
-			c_vk_listner(p->user_data, p->callback);
-	if (!answer)
-		return NULL;	
-	
-	return answer;	
-}
+		char *html = c_vk_listner(user_data, callback);
+		if (!html)
+			return NULL;
 
-static void * 
-c_vk_listner_killer(void *params)
-{
-	struct c_vk_oauth_params *p = params;
-	while (p->exit == 0){
-		if (p->callback(p->user_data, NULL, 0, NULL,
-					"waiting connection..."))
-		{
-			p->callback(p->user_data, NULL, 0, NULL,
-					"callback return non zero - close connection");
-			// stop socket
-			int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-			
-			struct sockaddr_in sin;
-			sin.sin_family = AF_INET;
-			sin.sin_port = htons(DEFAULT_PORT);
-			sin.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-			if (connect(sockfd, (struct sockaddr *)&sin, 
-						sizeof(sin)) == -1) {
-				p->callback(p->user_data, NULL, 0, NULL,
-						"can't connect to socket");
-				break;
-			}
-			char msg[] = "stop";
-			send(sockfd, msg, strlen(msg), 0);
-			break;
+		//find start of verification code
+		const char * pattern = "code="; 
+		int len = strlen(pattern);
+		int start = strfnd(html, pattern); 
+		if (start < 0){
+			callback(user_data, NULL, 0, NULL,
+					"Couldn't find verification code in message");
+			return NULL;
 		}
-	
-		sleep(10);
-	}
-	free(p);
-	pthread_exit(0);
-}
+		//find end of code
+		long end = strfnd(&html[start], " ");
 
-static char * 
-c_vk_listner_for_code(
-		void * user_data,
-		int (*callback)(
-			void * user_data,
-			const char * access_token,
-			int expires_in,
-			const char * user_id,
-			const char * error))
-{
+		//find length of verification code
+		long clen = end - len;
 
-	// create thread to get code and killer to catch callback
-	pthread_t t, k;       
-	pthread_attr_t ta, ka; 
+		//allocate code and copy
+		char * code = malloc(clen + 1);
+		if (!code){
+			callback(user_data, NULL, 0, NULL,
+					"error memory allocation");
+			return NULL;
+		}
+		strncpy(code, &html[start + len], clen);
+		code[clen] = 0;
 
-	//получаем дефолтные значения атрибутов
-	if(pthread_attr_init(&ta)){
-		callback(user_data, NULL, 0, NULL, 
-				"Can't set thread attributes");
-		return NULL;
-	};
-	
-	struct c_vk_oauth_params *p =
-			malloc(sizeof(struct c_vk_oauth_params));
-	if(!p){
-		callback(user_data, NULL, 0, NULL, 
-				"Can't allocate memory");
-		pthread_cancel(t);
-		return NULL;
-	}
-	p->user_data = user_data;
-	p->callback = callback;
-	p->tid = t;
-	p->exit = 0;
-	
-	//создаем новый поток
-	if (pthread_create(&t,&ta, 
-				c_vk_listner_in_thread, p)){
-		callback(user_data, NULL, 0, NULL, 
-				"Can't create thread");
-		return NULL;
-	}
-
-	//create thread killer
-	if(pthread_attr_init(&ka)){
-		callback(user_data, NULL, 0, NULL, 
-				"Can't set thread attributes");
-		pthread_cancel(t);
-		return NULL;
-	};
-	
-	if (pthread_create(&k,&ka, 
-				c_vk_listner_killer, p)){
-		callback(user_data, NULL, 0, NULL, 
-				"Can't create thread");
-		pthread_cancel(t);
-		return NULL;
-	}
-
-	void *_answer = NULL;
-	int err = pthread_join(t, &_answer);
-	
-	// no need killer any more
-	if (p)
-		p->exit = 1;
-	
-	if (err){
-		callback(user_data, NULL, 0, NULL, 
-				"thread returned error");
-		return NULL;
-	}
-
-	char *answer = _answer;
-	if (!answer)
-		return NULL;
-
-	//find start of verification code
-	const char * pattern = "code="; 
-	int len = strlen(pattern);
-	int start = _strfnd(answer, pattern); 
-	if (start < 0){
-		callback(user_data, NULL, 0, NULL,
-				"Couldn't find verification code in message");
-		return NULL;
-	}
-	//find end of code
-	long end = _strfnd(&answer[start], " ");
-
-	//find length of verification code
-	long clen = end - len;
-
-	//allocate code and copy
-	char * code = malloc(clen + 1);
-	if (!code){
-		callback(user_data, NULL, 0, NULL,
-				"error memory allocation");
-		return NULL;
-	}
-	strncpy(code, &answer[start + len], clen);
-	code[clen] = 0;
-
-	return code;
+		return code;
 }
 
 struct string {
@@ -316,22 +188,13 @@ struct string {
 static void init_string(struct string *s) {
 	s->len = 0;
 	s->ptr = malloc(s->len+1);
-	if (!s->ptr){
-		perror("malloc");
-		return;
-	}
 	s->ptr[0] = '\0';
 }
 
-static size_t writefunc(void *ptr, size_t size, 
-		size_t nmemb, struct string *s)
+static size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s)
 {
 	size_t new_len = s->len + size*nmemb;
 	s->ptr = realloc(s->ptr, new_len+1);
-	if (!s->ptr){
-		perror("realloc");
-		return 0;
-	}
 	memcpy(s->ptr+s->len, ptr, size*nmemb);
 	s->ptr[new_len] = '\0';
 	s->len = new_len;
@@ -344,7 +207,7 @@ void c_vk_get_token(
 		const char *client_id, 
 		const char *client_secret, 
 		void * user_data,
-		int (*callback)(
+		void (*callback)(
 			void * user_data,
 			const char * access_token,
 			int expires_in,
@@ -369,7 +232,7 @@ void c_vk_get_token(
 	}
 
 	// listen for code
-	char *code = c_vk_listner_for_code(user_data, callback);
+	char *code = c_vk_listen_for_code(user_data, callback);
 	if (!code)
 		return;
 
@@ -418,40 +281,37 @@ void c_vk_get_token(
 	cJSON *json = cJSON_ParseWithLength(s.ptr, s.len);
 	if (!json){
 		char str[BUFSIZ];
-		sprintf(str, "Can't parse json. cURL returns: %s", s.ptr);
+		sprintf(str, "Can't parse json. cURL retune: %s", s.ptr);
 		callback(user_data, NULL, 0, NULL, str);
 		free(s.ptr);
 		return;			
 	}
 	free(s.ptr);
 	if (cJSON_IsObject(json)) {
-			cJSON *access_token = 
-					cJSON_GetObjectItem(json, "access_token");			
-			if (!access_token) { //handle errors
-				cJSON *error_description = 
-						cJSON_GetObjectItem(json, "error_description");
-				if (!error_description) {
-					//no error code in JSON answer
-					callback(user_data, NULL, 0, NULL, "unknown error!"); 
-					cJSON_free(json);
-					return;
-				}
-				callback(user_data, NULL, 0, NULL, 
-						error_description->valuestring);
+		cJSON *access_token = 
+				cJSON_GetObjectItem(json, "access_token");			
+		if (!access_token) { //handle errors
+			cJSON *error_description = 
+					cJSON_GetObjectItem(json, "error_description");
+			if (!error_description) {
+				//no error code in JSON answer
+				callback(user_data, NULL, 0, NULL, "unknown error!"); 
 				cJSON_free(json);
 				return;
 			}
-			//OK - we have a token
-			callback(
-					user_data, 
-					access_token->valuestring, 
-					cJSON_GetObjectItem(json, "expires_in") ?		
-							cJSON_GetObjectItem(json, "expires_in")->valueint 
-							: 0, 
-					cJSON_GetObjectItem(json, "user_id") ? 
-							cJSON_GetObjectItem(json, "user_id")->valuestring 
-							: NULL, 
-					NULL);
+			callback(user_data, NULL, 0, NULL, error_description->valuestring);
 			cJSON_free(json);
-		}	
+			return;
+		}
+		//OK - we have a token
+		callback(
+				user_data, 
+				access_token->valuestring, 
+				cJSON_GetObjectItem(json, "expires_in") ?		
+						cJSON_GetObjectItem(json, "expires_in")->valueint : 0, 
+				cJSON_GetObjectItem(json, "user_id") ? 
+						cJSON_GetObjectItem(json, "user_id")->valuestring : NULL, 
+				NULL);
+		cJSON_free(json);
+	}	
 }

@@ -72,14 +72,12 @@ char * c_vk_auth_url(
 		);
 
 /* launch listner on DEFAULT_PORT to catch authorization code
- * and change it to token. Every 10 seconds listner will return
- * status message in callback. To stop function execution
- * return non-zero in callback */
+ * and change it to token. */
 void c_vk_get_token(
 		const char *client_id,         // get in https://vk.com/apps
 		const char *client_secret,     // get in https://vk.com/apps
 		void * user_data,
-		int (*callback)(
+		void (*callback)(
 			void * user_data,
 			const char * access_token,
 			int expires_in,              // seconds of token life - 0 for immortal
