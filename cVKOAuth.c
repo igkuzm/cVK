@@ -1,5 +1,5 @@
 /**
- * File              : cVK.c
+ * File              : cVKOAuth.c
  * Author            : Igor V. Sementsov <ig.kuzm@gmail.com>
  * Date              : 11.08.2023
  * Last Modified Date: 13.08.2023
@@ -13,6 +13,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <curl/curl.h>
+#include <unistd.h>
 
 #include "cJSON.h"
 #include "cVK.h"
