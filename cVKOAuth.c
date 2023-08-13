@@ -56,6 +56,10 @@ static char * c_vk_listner(
     // Clean buffers:
     memset(server_message, '\0', sizeof(server_message));
     memset(client_message, '\0', sizeof(client_message));
+    
+		// Clean sockaddr_in
+		memset(&server_addr, '\0', sizeof(server_addr));
+		memset(&client_addr, '\0', sizeof(client_addr));
 
     // Create socket:
     socket_desc = socket(AF_INET, SOCK_STREAM, 0);
