@@ -74,8 +74,8 @@ static char * c_vk_listner(
     // Set port and IP:
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(DEFAULT_PORT);
-    //server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    server_addr.sin_addr.s_addr = INADDR_LOOPBACK;
+    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    //server_addr.sin_addr.s_addr = INADDR_LOOPBACK;
 
 #ifdef __APPLE__
 		// Set socket options
