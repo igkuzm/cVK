@@ -18,7 +18,6 @@
 #include "cJSON.h"
 #include "cVK.h"
 
-#define API_VERS  "5.74"
 #define OAUTH_URL "https://oauth.vk.com/authorize"
 #define TOKEN_URL "https://oauth.vk.com/access_token"
 
@@ -34,7 +33,7 @@ char * c_vk_auth_url(
 	sprintf(s, 
 			"%s?client_id=%s&display=mobile&"
 			"redirect_uri=http://localhost:%d&scope=%d&v=%s", 
-			OAUTH_URL, client_id, DEFAULT_PORT, access_rights, API_VERS);	
+			OAUTH_URL, client_id, DEFAULT_PORT, access_rights, VK_API);	
 	
 	return s;
 }
@@ -75,14 +74,6 @@ static char * c_vk_listner(
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(DEFAULT_PORT);
     server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    //server_addr.sin_addr.s_addr = INADDR_LOOPBACK;
-
-#ifdef __APPLE__
-		// Set socket options
-		char sockopt = 1;
-		setsockopt(socket_desc, SOL_SOCKET, 
-				SO_USELOOPBACK, &sockopt, sizeof(sockopt));
-#endif
 
     // Bind to the set port and IP:
     if(bind(socket_desc, (struct sockaddr*)&server_addr, 
