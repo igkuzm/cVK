@@ -2,7 +2,8 @@
 
 lib_LTLIBRARIES  = libcVK.la
 libcVK_la_SOURCES = \
-		cVK.c\
+		oauth.c\
+		http.c\
 	  cJSON.c\
 	  uuid4.c
 

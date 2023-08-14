@@ -46,7 +46,13 @@ elseif(WIN32)
 	endif()
 endif()
 
-add_library(${TARGET} STATIC cVK.c cJSON.c uuid4.c ${ADDSRC})
+add_library(${TARGET} STATIC 
+	oauth.c 
+	http.c 
+	cJSON.c 
+	uuid4.c 
+	${ADDSRC}
+)
 target_link_libraries(${TARGET} curl z)
 target_link_directories(${TARGET} PRIVATE ${ADDDIRS})
 
