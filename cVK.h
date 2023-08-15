@@ -2,7 +2,7 @@
  * File              : cVK.h
  * Author            : Igor V. Sementsov <ig.kuzm@gmail.com>
  * Date              : 11.08.2023
- * Last Modified Date: 13.08.2023
+ * Last Modified Date: 16.08.2023
  * Last Modified By  : Igor V. Sementsov <ig.kuzm@gmail.com>
  */
 
@@ -14,6 +14,8 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include "cJSON.h"
+	
 
 #define  VK_API       "5.131"
 #define  VERIFY_SSL   0
@@ -85,6 +87,20 @@ void c_vk_get_token(
 			const char * user_id,
 			const char * error)
 		);
+
+/* run vk api method and callback json/error
+ * Return 0 on success or -1 on error*/
+int c_vk_run_method(
+		const char *token,  // authorization token
+		cJSON *content,     // content of message
+		void *user_data, 
+		void (*callback)    // response and error handler - NULL-able
+				(void *user_data,
+				 const cJSON *response,
+				 const char *error), 
+		const char *method, // method name from vk api
+		... );               // - params list - NULL-terminate
+
 
 #ifdef __cplusplus
 }  /* end of the 'extern "C"' block */
