@@ -2,7 +2,7 @@
  * File              : api_generator.c
  * Author            : Igor V. Sementsov <ig.kuzm@gmail.com>
  * Date              : 14.08.2023
- * Last Modified Date: 14.08.2023
+ * Last Modified Date: 15.08.2023
  * Last Modified By  : Igor V. Sementsov <ig.kuzm@gmail.com>
  */
 
@@ -45,8 +45,8 @@ static const char * last_comp(const char *filename) {
 		return slash + 1;
 }
 
-void generate_callbacks(
-		FILE *fp, FILE *fcallbacks)
+void generate_responses(
+		FILE *fp, FILE *fresponses)
 {
 	printf("Parse responses.json\n");
 
@@ -56,7 +56,8 @@ void generate_types_and_structures(
 		FILE *fp, 
 		FILE *ftypes, 
 		FILE *fstructures,
-		FILE *fsetters
+		FILE *fsetters,
+		FILE *fparsers
 		)
 {
 	printf("Parse objects.json\n");
@@ -68,7 +69,7 @@ void generate_types_and_structures(
 			cJSON *object = definitions->child;
 			while (object) {
 				// make type
-				char str[BUFSIZ], setter[BUFSIZ], getter[BUFSIZ];
+				char str[BUFSIZ], setter[BUFSIZ], parser[BUFSIZ];
 				printf("Generate type: %s\n", object->string);
 				// get object description
 				cJSON *object_description =
@@ -88,6 +89,15 @@ void generate_types_and_structures(
 							 object_description->valuestring);	
 					strcat(str, "\n");
 					fputs(str, ftypes);
+					//make parser
+					sprintf(parser, 
+							"static %s_t * %s_from_json(cJSON *json){\n", 
+							object->string, object->string);
+					sprintf(parser, 
+							"%s\treturn %s_from_json(json);\n", 
+							parser, last_comp(object_ref->valuestring));
+					strcat(parser, "}\n\n");
+					fputs(parser, fparsers);
 					
 					//iterate
 					object = object->next;
@@ -109,6 +119,14 @@ void generate_types_and_structures(
 								object_description->valuestring);	
 						strcat(str, "\n\n");
 						fputs(str, ftypes);
+						// make parser
+						sprintf(parser, 
+								"static %s_t * %s_from_json(cJSON *json){\n", 
+								object->string, object->string);
+						strcat(parser, 
+								"\treturn strdup(json->valuestring);\n"); 
+						strcat(parser, "}\n\n");
+						fputs(parser, fparsers);
 						
 						//iterate
 						object = object->next;
@@ -129,6 +147,15 @@ void generate_types_and_structures(
 								object_description->valuestring);	
 						strcat(str, "\n\n");
 						fputs(str, ftypes);
+						//make parser
+						sprintf(parser, 
+								"static %s_t %s_from_json(cJSON *json){\n", 
+								object->string, object->string);
+						strcat(parser, 
+								"\treturn json->valueint;\n"); 
+						strcat(parser, "}\n\n");
+						fputs(parser, fparsers);
+
 						//iterate
 						object = object->next;
 						continue;
@@ -143,6 +170,15 @@ void generate_types_and_structures(
 						// make structure
 						printf("Generate structure: %s\n", object->string);
 						sprintf(str, "struct %s{\n", object->string);
+						
+						// make parser
+						sprintf(parser, 
+								"static %s_t * %s_from_json(cJSON *json){\n" 
+								"\t%s_t *object = (%s_t *)malloc(sizeof(%s_t));\n"
+								"\tif(!object) {perror(\"malloc\"); return NULL;}\n", 
+								object->string, object->string,
+								object->string, object->string, object->string);
+						
 						cJSON *properties =
 								cJSON_GetObjectItem(object, "properties");
 						if (properties){
@@ -188,6 +224,16 @@ void generate_types_and_structures(
 												property->string, object->string,
 												property->string);
 										fputs(setter, fsetters);
+										// parser
+										sprintf(parser, 
+												"%s\tcJSON * %s_json =\n"
+												"\t\t\tcJSON_GetObjectItem(json, \"%s\");\n" 
+												"\tif(%s_json)\n"
+												"\t\tobject->%s_ = %s_json->valueint;\n",
+											parser, 
+											property->string, property->string,
+											property->string,
+											property->string, property->string);
 									}
 									// string type
 									else if (strcmp(type->valuestring, 
@@ -217,6 +263,16 @@ void generate_types_and_structures(
 												property->string, object->string,
 												property->string);
 										fputs(setter, fsetters);
+										// parser
+										sprintf(parser, 
+												"%s\tcJSON * %s_json =\n"
+												"\t\t\tcJSON_GetObjectItem(json, \"%s\");\n" 
+												"\tif(%s_json)\n"
+												"\t\tobject->%s_ = strdup(%s_json->valuestring);\n",
+											parser, 
+											property->string, property->string,
+											property->string,
+											property->string, property->string);
 									}
 									// boolean type
 									else if (strcmp(type->valuestring, 
@@ -246,6 +302,16 @@ void generate_types_and_structures(
 												property->string, object->string,
 												property->string);
 										fputs(setter, fsetters);
+										// parser
+										sprintf(parser, 
+												"%s\tcJSON * %s_json =\n"
+												"\t\t\tcJSON_GetObjectItem(json, \"%s\");\n" 
+												"\tif(%s_json)\n"
+												"\t\tobject->%s_ = %s_json->valueint;\n",
+											parser, 
+											property->string, property->string,
+											property->string,
+											property->string, property->string);
 									}
 									// array type
 									else if (strcmp(type->valuestring, 
@@ -257,12 +323,18 @@ void generate_types_and_structures(
 										if (items){
 											// items may have ref or type
 											const char *array_type = NULL;
+											const char *jsonvalue = NULL;
 											// check if ref
 											cJSON *items_ref =
 													cJSON_GetObjectItem(items, "$ref");
-											if (items_ref)
+											if (items_ref){
 												array_type = 
 														last_comp(items_ref->valuestring);
+												char jsonvalueref[128];
+												sprintf(jsonvalueref, "%s_from_json(item)", 
+														last_comp(items_ref->valuestring));
+												jsonvalue = jsonvalueref;
+											}
 											// check if type
 											cJSON *items_type =
 													cJSON_GetObjectItem(items, "type");
@@ -276,13 +348,20 @@ void generate_types_and_structures(
 															cJSON_GetObjectItem(items, "format");
 													if (format)
 														array_type = format->valuestring;
+													jsonvalue = ("item->valueint");
 												}
 												else if (strcmp(
 															items_type->valuestring, "string") == 0)
+												{
 													array_type = "char *";
+													jsonvalue = ("item->valuestring");
+												}
 												else if (strcmp(
 															items_type->valuestring, "boolean") == 0)
+												{
 													array_type = "bool";
+													jsonvalue = ("item->valueint");
+												}
 											}
 											sprintf(str, "%s\t%s * %s; ", 
 													str, array_type, property->string);
@@ -298,16 +377,18 @@ void generate_types_and_structures(
 											sprintf(setter, 
 													"static void %s_set_%s(%s_t *object, %s * value, int len){\n"
 													"int i;\n"
-													"\tobject->%s_ = malloc(len * sizeof(%s) + 8);\n"
+													"\tobject->%s_ = malloc(len * sizeof(%s));\n"
+													"\tif(!object->%s_) {perror(\"malloc\"); return NULL;}\n", 
 													"\tfor(i=0;i<len;++i){\n"
 													"\t\tobject->%s[i] = value[i];\n"
 													"\t}\n"
 													"\tobject->%s_len = len;\n"
 													"}\n\n",
-													object->string, property->string,
-													object->string, array_type,
+													object->string, property->string, object->string, array_type,
 													property->string, array_type,
-													property->string, property->string);
+													property->string,
+													property->string, 
+													property->string);
 											fputs(setter, fsetters);
 											//getter
 											sprintf(setter, 
@@ -322,6 +403,29 @@ void generate_types_and_structures(
 													property->string,
 													property->string);
 											fputs(setter, fsetters);
+											// parser
+											sprintf(parser, 
+													"%s\tcJSON * %s_json =\n"
+													"\t\t\tcJSON_GetObjectItem(json, \"%s\");\n" 
+													"\tif(%s_json){\n"
+													"\t\tint i, len = cJSON_GetArraySize(%s_json);\n"
+													"\t\tobject->%s_ = malloc(len * sizeof(%s_t));\n"
+													"\t\tif(!object->%s_) {perror(\"malloc\"); return NULL;}\n" 
+													"\t\tfor(i=0;i<len;++i){\n"
+													"\t\t\tcJSON *item = cJSON_GetArrayItem(%s_json, i);\n"
+													"\t\t\tobject->%s[i] = %s;\n"
+													"\t\t}\n"
+													"\t\tobject->%s_len = len;\n"
+													"\t}\n",
+												parser, property->string, 
+												property->string,
+												property->string,
+												property->string,
+												property->string, property->string,
+												property->string,
+												property->string,
+												property->string, jsonvalue,
+												property->string);
 										}
 										perror("type is array, but no items");
 									}
@@ -329,7 +433,7 @@ void generate_types_and_structures(
 									cJSON *ref =
 											cJSON_GetObjectItem(property, "$ref");
 									if (ref){
-											sprintf(str, "%s\t%s_t %s_; ", 
+											sprintf(str, "%s\t%s_t * %s_; ", 
 												str,
 												last_comp(ref->valuestring),
 												property->string);
@@ -339,7 +443,7 @@ void generate_types_and_structures(
 										strcat(str, "\n");
 										// setter
 										sprintf(setter, 
-												"static void %s_set_%s(%s_t *object, %s_t value){\n"
+												"static void %s_set_%s(%s_t *object, %s_t * value){\n"
 												"\tobject->%s_ = value;\n"
 												"}\n\n",
 												object->string, property->string,
@@ -349,7 +453,7 @@ void generate_types_and_structures(
 										fputs(setter, fsetters);
 										//getter
 										sprintf(setter, 
-												"static %s_t %s_get_%s(%s_t *object){\n"
+												"static %s_t * %s_get_%s(%s_t *object){\n"
 												"\treturn object->%s_;\n"
 												"}\n\n",
 												last_comp(ref->valuestring),
@@ -357,6 +461,11 @@ void generate_types_and_structures(
 												property->string, object->string,
 												property->string);
 										fputs(setter, fsetters);
+										// parser
+										sprintf(parser, 
+												"%s\tobject->%s_ = %s_from_json(item);\n", 
+												parser, property->string,
+												last_comp(ref->valuestring));
 									}
 								}
 
@@ -367,8 +476,11 @@ void generate_types_and_structures(
 							perror("no properties in object");
 						
 						// close struct and write 
-						sprintf(str, "%s};\n\n", str);
+						strcat(str, "%s};\n\n");
 						fputs(str, fstructures);
+						// close parser and write
+						strcat(parser, "\treturn object;\n}\n\n");  
+						fputs(parser, fparsers);
 					}
 				}
 				//iterate
@@ -384,13 +496,13 @@ int main(int argc, char *argv[])
 {
 	int i;
 	FILE *ftypes, *fstrucutures, *fmethods, 
-			 *fversion, *fcallbacks, *fsetters;
+			 *fversion, *fresponses, *fsetters, *fparsers;
 	const char htypes[]       = "types.h",
 						 hversion[]     = "version.h",
 						 hstructures[]  = "structures.h",
-						 hcallbacks[]   = "callbacks.h",
+						 hresponses[]   = "responses.h",
 						 hsetters[]     = "setters.h",
-						 hgetters[]     = "getters.h",
+						 hparsers[]     = "parsers.h",
 						 hmethods[]     = "methods.h";
 
 	// remove files
@@ -398,18 +510,21 @@ int main(int argc, char *argv[])
 	remove(hversion);
 	remove(hstructures);
 	remove(hmethods);
-	remove(hcallbacks);
+	remove(hresponses);
 	remove(hsetters);
+	remove(hparsers);
 
 	// opnen new streams
 	ftypes       = fopen(htypes,      "w");
 	fversion     = fopen(hversion,    "w");
 	fstrucutures = fopen(hstructures, "w");
 	fmethods     = fopen(hmethods,    "w");
-	fcallbacks   = fopen(hcallbacks,  "w");
-	fsetters     = fopen(hsetters,  "w");
+	fresponses   = fopen(hresponses,  "w");
+	fsetters     = fopen(hsetters,    "w");
+	fparsers     = fopen(hparsers,    "w");
 	if (!ftypes || !fstrucutures || !fmethods 
-							|| !fversion     || !fcallbacks || !fsetters)
+							|| !fversion     || !fresponses 
+							|| !fsetters     || !fparsers)
 	{
 		perror("cant't open streams");
 		return -1;
@@ -432,9 +547,9 @@ int main(int argc, char *argv[])
 	fputs("typedef uint64_t uint64;\n", fstrucutures);
 	fputs("\n", fstrucutures);
 	
-	fputs("#ifndef VK_CALLBACKS_H\n", fcallbacks);
-	fputs("#define VK_CALLBACKS_H\n", fcallbacks);
-	fputs("\n", fcallbacks);
+	fputs("#ifndef VK_RESPONSES_H\n", fresponses);
+	fputs("#define VK_RESPONSES_H\n", fresponses);
+	fputs("\n", fresponses);
 
 	fputs("#ifndef VK_SETTERS_H\n", fsetters);
 	fputs("#define VK_SETTERS_H\n", fsetters);
@@ -442,6 +557,16 @@ int main(int argc, char *argv[])
 	fputs("#include <string.h>\n", fsetters);
 	fputs("\n", fsetters);
 	
+	fputs("#ifndef VK_PARSERS_H\n", fparsers);
+	fputs("#define VK_PARSERS_H\n", fparsers);
+	fputs("#include \"structures.h\"\n", fparsers);
+	fputs("#include <stdio.h>\n", fparsers);
+	fputs("#include <string.h>\n", fparsers);
+	fputs("#include <stdlib.h>\n", fparsers);
+	fputs("#include \"cJSON.h\"\n", fparsers);
+	fputs("\n", fparsers);
+	
+
 	// open api
 	char api_package_path[128];
 	sprintf(api_package_path, "%s/package.json", API_PATH);
@@ -494,7 +619,8 @@ int main(int argc, char *argv[])
 								fp, 
 								ftypes, 
 								fstrucutures,
-								fsetters
+								fsetters,
+								fparsers
 								);
 						fclose(fp);
 					}
@@ -505,7 +631,7 @@ int main(int argc, char *argv[])
 					char responses_path[256];
 					sprintf(objects_path, "%s/responses.json", sect_path);
 					if ((fp = fopen(responses_path, "r"))){
-						generate_callbacks(fp, fcallbacks);
+						generate_responses(fp, fresponses);
 						fclose(fp);
 					}
 					else {
@@ -520,15 +646,17 @@ int main(int argc, char *argv[])
 	// close streams
 	fputs("#endif //VK_TYPES_H\n", ftypes);
 	fputs("#endif //VK_STRUCTURES_H\n", fstrucutures);
-	fputs("#endif //VK_CALLBACKS_H\n", fcallbacks);
+	fputs("#endif //VK_RESPONSES_H\n", fresponses);
 	fputs("#endif //VK_SETTERS_H\n", fsetters);
+	fputs("#endif //VK_PARSERS_H\n", fparsers);
 	
 	fclose(ftypes);
 	fclose(fversion);
 	fclose(fstrucutures);
-	fclose(fcallbacks);
+	fclose(fresponses);
 	fclose(fmethods);
 	fclose(fsetters);
+	fclose(fparsers);
 
 	return 0;
 }
