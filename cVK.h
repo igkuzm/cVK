@@ -13,13 +13,10 @@
 extern "C" {
 #endif
 
+#include "config.h"
 #include <stdint.h>
 #include "cJSON.h"
 	
-
-#define  VK_API       "5.131"
-#define  VERIFY_SSL   0
-#define  DEFAULT_PORT 2000
 /*
  * To create new application visit https://vk.com/apps
  * Set Open API ON, basic domen to localhost
