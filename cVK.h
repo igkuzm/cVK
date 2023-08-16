@@ -54,7 +54,7 @@ extern "C" {
 #define AR_STATS        1<<20
 #define AR_EMAIL        1<<22
 #define AR_MARKET       1<<27
-#define AR_PHONE_NUMBER 1<<287
+#define AR_PHONE_NUMBER 1<<28
 
 // ACCESS-RIGHTS FOR GROUP
 #define ARG_STORIES     1<<0
