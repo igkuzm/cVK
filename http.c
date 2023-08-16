@@ -8,6 +8,7 @@
 
 #include "cJSON.h"
 #include "cVK.h"
+#include "config.h"
 #include <curl/curl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -79,22 +80,16 @@ int c_vk_run_method(
 	}
 		
 	char requestString[BUFSIZ];	
-	sprintf(requestString, "%s%s", API_URL, method);
+	sprintf(requestString, "%s%s?v=%s", API_URL, method, VK_API);
 	va_list argv;
 	va_start(argv, method);
 	const char *arg = va_arg(argv, const char*);
-	if (arg) {
-		sprintf(requestString, "%s?%s", requestString, arg);
-		arg = va_arg(argv, const char*);	
-	}
 	while (arg) {
 		sprintf(requestString, "%s&%s", requestString, arg);
 		arg = va_arg(argv, const char*);	
 	}
 	va_end(argv);
 
-	// vk api version
-	sprintf(requestString, "%s&v=%s", requestString, VK_API);
 	printf("REQUEST: %s\n", requestString);
 
 	curl_easy_setopt(curl, CURLOPT_URL, requestString);
