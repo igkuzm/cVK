@@ -73,7 +73,7 @@ char * c_vk_auth_url(
 
 /* launch listner on DEFAULT_PORT to catch authorization code
  * and change it to token. */
-void c_vk_get_token(
+void c_vk_auth_token(
 		const char *client_id,         // get in https://vk.com/apps
 		const char *client_secret,     // get in https://vk.com/apps
 		void * user_data,
