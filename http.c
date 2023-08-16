@@ -6,6 +6,7 @@
  * Last Modified By  : Igor V. Sementsov <ig.kuzm@gmail.com>
  */
 
+#include "cJSON.h"
 #include "cVK.h"
 #include <curl/curl.h>
 #include <stdio.h>
@@ -135,7 +136,7 @@ int c_vk_run_method(
 	cJSON *json = cJSON_ParseWithLength(s.ptr, s.len);
 	if (json){
 		cJSON *responce =
-			cJSON_GetObjectItem(json, "responce");
+			cJSON_GetObjectItem(json, "response");
 		if (responce){
 			if (callback)
 				callback(user_data, responce, NULL);
@@ -153,6 +154,11 @@ int c_vk_run_method(
 					if (callback)
 						callback(user_data, NULL, msg->valuestring);
 				}
+			} else {
+				char msg[BUFSIZ];
+				snprintf(msg, BUFSIZ-1, "Error. Server retuned: %s", cJSON_Print(json));
+				if (callback)
+					callback(user_data, NULL, msg);
 			}
 		}
 		cJSON_free(json);
