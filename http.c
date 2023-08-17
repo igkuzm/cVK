@@ -2,7 +2,7 @@
  * File              : http.c
  * Author            : Igor V. Sementsov <ig.kuzm@gmail.com>
  * Date              : 13.08.2023
- * Last Modified Date: 16.08.2023
+ * Last Modified Date: 17.08.2023
  * Last Modified By  : Igor V. Sementsov <ig.kuzm@gmail.com>
  */
 
@@ -49,17 +49,15 @@ size_t writefunc(void *ptr, size_t size,
 
 int c_vk_run_method(
 		const char *token,
-		cJSON *content,
+		const char *body,
 		void *user_data, 
 		void (*callback)(void *user_data, const cJSON *response, const char *error),
 		const char *method, ...)
 {
 	const char * http_method = "GET";
-	char *body = NULL;    // content string
 	size_t body_len = 0;  // content length
 	
-	if (content){
-		body = cJSON_Print(content);
+	if (body){
 		body_len = strlen(body);
 		http_method = "POST";
 	}
@@ -89,8 +87,7 @@ int c_vk_run_method(
 		arg = va_arg(argv, const char*);	
 	}
 	va_end(argv);
-
-	printf("REQUEST: %s\n", requestString);
+	//printf("REQUEST: %s\n", requestString);
 
 	curl_easy_setopt(curl, CURLOPT_URL, requestString);
 	curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, http_method);		

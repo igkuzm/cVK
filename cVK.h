@@ -2,7 +2,7 @@
  * File              : cVK.h
  * Author            : Igor V. Sementsov <ig.kuzm@gmail.com>
  * Date              : 11.08.2023
- * Last Modified Date: 16.08.2023
+ * Last Modified Date: 17.08.2023
  * Last Modified By  : Igor V. Sementsov <ig.kuzm@gmail.com>
  */
 
@@ -64,14 +64,27 @@ extern "C" {
 #define ARG_DOCS        1<<17
 #define ARG_MANAGE      1<<18
 
-/* return allocated c null-terminated string with 
+/* Implicit Flow authorization method. You need to configure your
+ * application to handle url: vkCLIENT_ID://
+ * For iOS it is done in Info.plist in CFBundleURLTypes.
+ * c_vk_auth_url return allocated c null-terminated string with 
  * authorisation URL or NULL on error*/
 char * c_vk_auth_url(
 		const char *client_id,
 		uint32_t access_rights //https://dev.vk.com/references/access-rights
 		);
 
-/* launch listner on DEFAULT_PORT to catch authorization code
+
+/* Authothorization Code Flow method.
+ * return allocated c null-terminated string with 
+ * authorisation URL or NULL on error*/
+char * c_vk_auth_code_url(
+		const char *client_id,
+		uint32_t access_rights //https://dev.vk.com/references/access-rights
+		);
+
+/* The second stage of Authorization Code Flow method.
+ * launch listner on DEFAULT_PORT to catch authorization code
  * and change it to token. */
 void c_vk_auth_token(
 		const char *client_id,         // get in https://vk.com/apps
@@ -85,33 +98,11 @@ void c_vk_auth_token(
 			const char * error)
 		);
 
-/* return allocated c null-terminated string with 
- * authorisation URL or NULL on error*/
-char * c_vk_auth_url_implict_flow(
-		const char *client_id,
-		uint32_t access_rights //https://dev.vk.com/references/access-rights
-		);
-
-/* launch listner on DEFAULT_PORT to catch authorization code
- * and change it to token. */
-void c_vk_auth_token_implict_flow(
-		const char *client_id,         // get in https://vk.com/apps
-		const char *client_secret,     // get in https://vk.com/apps
-		void * user_data,
-		void (*callback)(
-			void * user_data,
-			const char * access_token,
-			int expires_in,              // seconds of token life - 0 for immortal
-			const char * user_id,
-			const char * error)
-		);
-
-
 /* run vk api method and callback json/error
  * Return 0 on success or -1 on error*/
 int c_vk_run_method(
 		const char *token,  // authorization token
-		cJSON *content,     // content of message
+		const char *body,   // content of message - NULL-able
 		void *user_data, 
 		void (*callback)    // response and error handler - NULL-able
 				(void *user_data,
