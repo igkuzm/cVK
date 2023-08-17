@@ -31,7 +31,7 @@ char * c_vk_auth_url(
 		return NULL;
 	}
 	sprintf(s, 
-			"%s?client_id=%s&"
+			"%s?client_id=%s&response_type=token&"
 			"redirect_uri=vk%s://authorize&scope=%d&v=%s", 
 			OAUTH_URL, client_id, client_id, access_rights, VK_API);	
 	
