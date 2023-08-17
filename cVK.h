@@ -85,6 +85,28 @@ void c_vk_auth_token(
 			const char * error)
 		);
 
+/* return allocated c null-terminated string with 
+ * authorisation URL or NULL on error*/
+char * c_vk_auth_url_implict_flow(
+		const char *client_id,
+		uint32_t access_rights //https://dev.vk.com/references/access-rights
+		);
+
+/* launch listner on DEFAULT_PORT to catch authorization code
+ * and change it to token. */
+void c_vk_auth_token_implict_flow(
+		const char *client_id,         // get in https://vk.com/apps
+		const char *client_secret,     // get in https://vk.com/apps
+		void * user_data,
+		void (*callback)(
+			void * user_data,
+			const char * access_token,
+			int expires_in,              // seconds of token life - 0 for immortal
+			const char * user_id,
+			const char * error)
+		);
+
+
 /* run vk api method and callback json/error
  * Return 0 on success or -1 on error*/
 int c_vk_run_method(

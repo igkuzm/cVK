@@ -2,7 +2,7 @@
  * File              : oauth.c
  * Author            : Igor V. Sementsov <ig.kuzm@gmail.com>
  * Date              : 11.08.2023
- * Last Modified Date: 13.08.2023
+ * Last Modified Date: 16.08.2023
  * Last Modified By  : Igor V. Sementsov <ig.kuzm@gmail.com>
  */
 
@@ -32,6 +32,23 @@ char * c_vk_auth_url(
 	}
 	sprintf(s, 
 			"%s?client_id=%s&display=mobile&"
+			"redirect_uri=http://localhost:%d&scope=%d&v=%s", 
+			OAUTH_URL, client_id, DEFAULT_PORT, access_rights, VK_API);	
+	
+	return s;
+}
+
+char * c_vk_auth_url_implict_flow(
+		const char *client_id,  
+		uint32_t access_rights) //https://dev.vk.com/references/access-rights
+{
+	char *s = malloc(BUFSIZ);
+	if (!s){
+		perror("malloc");
+		return NULL;
+	}
+	sprintf(s, 
+			"%s?client_id=%s&display=mobile&response_type=token&"
 			"redirect_uri=http://localhost:%d&scope=%d&v=%s", 
 			OAUTH_URL, client_id, DEFAULT_PORT, access_rights, VK_API);	
 	
@@ -318,4 +335,118 @@ void c_vk_auth_token(
 				NULL);
 		cJSON_free(json);
 	}	
+}
+
+// callback acces token
+void c_vk_auth_token_implict_flow(
+		const char *client_id, 
+		const char *client_secret, 
+		void * user_data,
+		void (*callback)(
+			void * user_data,
+			const char * access_token,
+			int expires_in,
+			const char * user_id,
+			const char * error
+			)
+		)
+{
+	if (!callback){
+		perror("callback is NULL");
+		return;
+	}
+
+	if (!client_id) {
+		callback(user_data, NULL, 0, NULL, "No client_id");
+		return;
+	}
+
+	if (!client_secret) {
+		callback(user_data, NULL, 0, NULL, "No client_secret");
+		return;
+	}
+
+	// listen for code
+	char *answer = c_vk_listner(user_data, callback);
+	if (!answer)
+		return;
+
+	// ask token
+	//CURL *curl = curl_easy_init();
+	//if (!curl){
+		//callback(user_data, NULL, 0, NULL, "Can't init cURL");
+		//return;
+	//}
+
+	//struct string s;
+	//init_string(&s);
+	
+	//char str[BUFSIZ];
+	//sprintf(str, 
+		//"%s?client_id=%s&client_secret=%s&"
+		//"redirect_uri=http://localhost:%d&code=%s", 
+		//TOKEN_URL, client_id, client_secret, DEFAULT_PORT, code);	
+	
+	//curl_easy_setopt(curl, CURLOPT_URL, str);
+	//curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "GET");		
+	//curl_easy_setopt(curl, CURLOPT_HEADER, 0);
+
+	//curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+	//curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+	
+	//struct curl_slist *header = NULL;
+	//header = curl_slist_append(header, "Connection: close");		
+	//header = curl_slist_append(header, 
+			//"Content-Type: application/x-www-form-urlencoded");		
+	//curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header);
+	
+	//curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, VERIFY_SSL);		
+
+	//CURLcode res = curl_easy_perform(curl);
+
+	//if (res) { //handle erros
+		//callback(user_data, NULL, 0, NULL, curl_easy_strerror(res));
+		//curl_easy_cleanup(curl);
+		//curl_slist_free_all(header);
+		//return;			
+	//}		
+	//curl_easy_cleanup(curl);
+	//curl_slist_free_all(header);
+
+	//cJSON *json = cJSON_ParseWithLength(s.ptr, s.len);
+	//if (!json){
+		//char str[BUFSIZ];
+		//sprintf(str, "Can't parse json. cURL retune: %s", s.ptr);
+		//callback(user_data, NULL, 0, NULL, str);
+		//free(s.ptr);
+		//return;			
+	//}
+	//free(s.ptr);
+	//if (cJSON_IsObject(json)) {
+		//cJSON *access_token = 
+				//cJSON_GetObjectItem(json, "access_token");			
+		//if (!access_token) { //handle errors
+			//cJSON *error_description = 
+					//cJSON_GetObjectItem(json, "error_description");
+			//if (!error_description) {
+				////no error code in JSON answer
+				//callback(user_data, NULL, 0, NULL, "unknown error!"); 
+				//cJSON_free(json);
+				//return;
+			//}
+			//callback(user_data, NULL, 0, NULL, error_description->valuestring);
+			//cJSON_free(json);
+			//return;
+		//}
+		////OK - we have a token
+		//callback(
+				//user_data, 
+				//access_token->valuestring, 
+				//cJSON_GetObjectItem(json, "expires_in") ?		
+						//cJSON_GetObjectItem(json, "expires_in")->valueint : 0, 
+				//cJSON_GetObjectItem(json, "user_id") ? 
+						//cJSON_GetObjectItem(json, "user_id")->valuestring : NULL, 
+				//NULL);
+		//cJSON_free(json);
+	//}	
 }
