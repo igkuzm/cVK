@@ -15,7 +15,6 @@ extern "C" {
 
 #include "config.h"
 #include <stdint.h>
-#include "cJSON.h"
 	
 /*
  * To create new application visit https://vk.com/apps
@@ -106,7 +105,7 @@ int c_vk_run_method(
 		void *user_data, 
 		void (*callback)    // response and error handler - NULL-able
 				(void *user_data,
-				 const cJSON *response,
+				 const char *response_json,
 				 const char *error), 
 		const char *method, // method name from vk api
 		... );               // - params list - NULL-terminate

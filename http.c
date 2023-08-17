@@ -51,7 +51,7 @@ int c_vk_run_method(
 		const char *token,
 		const char *body,
 		void *user_data, 
-		void (*callback)(void *user_data, const cJSON *response, const char *error),
+		void (*callback)(void *user_data, const char *response_json, const char *error),
 		const char *method, ...)
 {
 	const char * http_method = "GET";
@@ -131,7 +131,7 @@ int c_vk_run_method(
 			cJSON_GetObjectItem(json, "response");
 		if (responce){
 			if (callback)
-				callback(user_data, responce, NULL);
+				callback(user_data, cJSON_Print(responce), NULL);
 			cJSON_free(json);
 			free(s.ptr);		
 			return 0;
