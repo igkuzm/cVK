@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "cJSON.h"
+#include "../cJSON.h"
 #include <dirent.h>
 
 #define API_PATH "vk-api-schema"
@@ -54,11 +54,14 @@ void generate_responses(
 
 void generate_types_and_structures(
 		FILE *fp, 
-		FILE *ftypes, 
-		FILE *fstructures,
-		FILE *fsetgets,
-		FILE *fmems,
-		FILE *fparsers
+		FILE *ftypes_h, 
+		FILE *farrays_h, 
+		FILE *frefs_h, 
+		FILE *fstructures_h,
+		FILE *fstructures_def_h,
+		FILE *fsetgets_h,
+		FILE *fmems_h,
+		FILE *fparsers_h
 		)
 {
 	printf("Parse objects.json\n");
@@ -89,7 +92,7 @@ void generate_types_and_structures(
 						sprintf(str, "%s //%s", str, 
 							 object_description->valuestring);	
 					strcat(str, "\n");
-					fputs(str, ftypes);
+					fputs(str, frefs_h);
 					
 					// make alloc
 					sprintf(allocator, 
@@ -98,7 +101,7 @@ void generate_types_and_structures(
 							"}\n", 
 							object->string, object->string,
 							last_comp(object_ref->valuestring));
-					fputs(allocator, fmems);
+					fputs(allocator, fmems_h);
 
 					// make dealloc
 					sprintf(dealloc, 
@@ -107,7 +110,7 @@ void generate_types_and_structures(
 							"}\n\n", 
 							object->string, object->string,
 							last_comp(object_ref->valuestring));
-					fputs(dealloc, fmems);
+					fputs(dealloc, fmems_h);
 
 					//make parser
 					sprintf(parser, 
@@ -117,7 +120,7 @@ void generate_types_and_structures(
 							"%s\treturn %s_from_json(json);\n", 
 							parser, last_comp(object_ref->valuestring));
 					strcat(parser, "}\n\n");
-					fputs(parser, fparsers);
+					fputs(parser, fparsers_h);
 					
 					//iterate
 					object = object->next;
@@ -137,8 +140,8 @@ void generate_types_and_structures(
 						if (object_description)
 							sprintf(str, "%s //%s", str, 
 								object_description->valuestring);	
-						strcat(str, "\n\n");
-						fputs(str, ftypes);
+						strcat(str, "\n");
+						fputs(str, ftypes_h);
 						
 						// make alloc
 						sprintf(allocator, 
@@ -146,7 +149,7 @@ void generate_types_and_structures(
 							"\treturn NULL;\n" 
 							"}\n", 
 							object->string, object->string);
-						fputs(allocator, fmems);
+						fputs(allocator, fmems_h);
 
 						// make dealloc
 						sprintf(dealloc, 
@@ -154,7 +157,7 @@ void generate_types_and_structures(
 							"\tif(object) free(object);\n" 
 							"}\n\n",
 							object->string, object->string);
-						fputs(dealloc, fmems);
+						fputs(dealloc, fmems_h);
 
 						// make parser
 						sprintf(parser, 
@@ -163,9 +166,121 @@ void generate_types_and_structures(
 						strcat(parser, 
 								"\treturn strdup(json->valuestring);\n"); 
 						strcat(parser, "}\n\n");
-						fputs(parser, fparsers);
+						fputs(parser, fparsers_h);
 						
 						//iterate
+						object = object->next;
+						continue;
+					}
+					// object type is array
+					if (strcmp(object_type->valuestring, 
+								"array") == 0)
+					{
+						// get type of array
+						cJSON *items =
+								cJSON_GetObjectItem(object, "items");
+						if (items){
+							const char *array_type = NULL;
+							const char *jsonvalue = NULL;
+							// check if ref
+							cJSON *items_ref =
+									cJSON_GetObjectItem(items, "$ref");
+							if (items_ref){
+								char arraytyperef[128];
+								sprintf(arraytyperef, "%s_t *", 
+										last_comp(items_ref->valuestring));
+								array_type = arraytyperef; 
+								
+								char jsonvalueref[128];
+								sprintf(jsonvalueref, "%s_from_json(item)", 
+										last_comp(items_ref->valuestring));
+								jsonvalue = jsonvalueref;
+							}
+							// check if type
+							cJSON *items_type =
+									cJSON_GetObjectItem(items, "type");
+							if (items_type){
+								// type may be array or string
+								if (cJSON_IsString(items_type)){
+									if (strcmp(items_type->valuestring, "integer") == 0)
+									{
+										// check int format
+										array_type = "int *";
+										cJSON *format =
+												cJSON_GetObjectItem(items, "format");
+										if (format)
+											array_type = format->valuestring;
+										jsonvalue = ("item->valueint");
+									}
+									else if (strcmp(items_type->valuestring, "string") == 0)
+									{
+										array_type = "char **";
+										jsonvalue = ("item->valuestring");
+									}
+									else if (strcmp(items_type->valuestring, "boolean") == 0)
+									{
+										array_type = "bool *";
+										jsonvalue = ("item->valueint");
+									}
+								}
+								else if (cJSON_IsArray(items_type)){
+									// array of structures
+									char array_struct[128] = {0};
+									strcat(array_struct, "struct {");
+									int i;
+									for (i = 0; i < cJSON_GetArraySize(items_type); ++i) {
+										cJSON *items_type_item = cJSON_GetArrayItem(items_type, i);		
+										if (strcmp(items_type_item->valuestring, "string") == 0){
+											sprintf(array_struct, "%schar * v%d; ", array_struct, i);
+										} 
+										else if (strcmp(items_type_item->valuestring, "integer") == 0){
+											sprintf(array_struct, "%sint v%d; ", array_struct, i);
+										}
+										else if (strcmp(items_type_item->valuestring, "boolean") == 0){
+											sprintf(array_struct, "%sbool v%d; ", array_struct, i);
+										}
+									}
+									strcat(array_struct, "} *");
+									array_type = array_struct;
+								}
+							}
+							// typedef
+							sprintf(str, "typedef %s %s_t;", array_type,
+									object->string);
+							if (object_description)
+								sprintf(str, "%s //%s", str, 
+									object_description->valuestring);	
+							strcat(str, "\n");
+							fputs(str, farrays_h);
+							
+							// make alloc
+							sprintf(allocator, 
+								"static %s_t * %s_new(){\n" 
+								"\treturn NULL;\n" 
+								"}\n", 
+								object->string, object->string);
+							fputs(allocator, fmems_h);
+
+							// make dealloc
+							sprintf(dealloc, 
+								"static void %s_free(%s_t *object){\n" 
+								"\tfree(object);\n"
+								"}\n\n",
+								object->string, object->string);
+							fputs(dealloc, fmems_h);
+
+							//make parser
+							sprintf(parser, 
+									"static %s_t %s_from_json(cJSON *json){\n", 
+									object->string, object->string);
+							strcat(parser, 
+									"\treturn json->valueint;\n"); 
+							strcat(parser, "}\n\n");
+							fputs(parser, fparsers_h);
+						} else // no items 
+								perror("object is array, but no items");
+						
+						//iterate if array
 						object = object->next;
 						continue;
 					}
@@ -182,8 +297,8 @@ void generate_types_and_structures(
 						if (object_description)
 							sprintf(str, "%s //%s", str, 
 								object_description->valuestring);	
-						strcat(str, "\n\n");
-						fputs(str, ftypes);
+						strcat(str, "\n");
+						fputs(str, ftypes_h);
 						
 						// make alloc
 						sprintf(allocator, 
@@ -191,14 +306,14 @@ void generate_types_and_structures(
 							"\treturn NULL;\n" 
 							"}\n", 
 							object->string, object->string);
-						fputs(allocator, fmems);
+						fputs(allocator, fmems_h);
 
 						// make dealloc
 						sprintf(dealloc, 
 							"static void %s_free(%s_t *object){\n" 
 							"}\n\n",
 							object->string, object->string);
-						fputs(dealloc, fmems);
+						fputs(dealloc, fmems_h);
 
 						//make parser
 						sprintf(parser, 
@@ -207,7 +322,7 @@ void generate_types_and_structures(
 						strcat(parser, 
 								"\treturn json->valueint;\n"); 
 						strcat(parser, "}\n\n");
-						fputs(parser, fparsers);
+						fputs(parser, fparsers_h);
 
 						//iterate
 						object = object->next;
@@ -221,8 +336,8 @@ void generate_types_and_structures(
 						if (object_description)
 							sprintf(str, "%s //%s", str, 
 								object_description->valuestring);	
-						strcat(str, "\n\n");
-						fputs(str, ftypes);
+						strcat(str, "\n");
+						fputs(str, ftypes_h);
 						
 						// make alloc
 						sprintf(allocator, 
@@ -230,14 +345,14 @@ void generate_types_and_structures(
 							"\treturn NULL;\n" 
 							"}\n", 
 							object->string, object->string);
-						fputs(allocator, fmems);
+						fputs(allocator, fmems_h);
 
 						// make dealloc
 						sprintf(dealloc, 
 							"static void %s_free(%s_t *object){\n" 
 							"}\n\n",
 							object->string, object->string);
-						fputs(dealloc, fmems);
+						fputs(dealloc, fmems_h);
 
 						//make parser
 						sprintf(parser, 
@@ -246,7 +361,7 @@ void generate_types_and_structures(
 						strcat(parser, 
 								"\treturn json->valueint;\n"); 
 						strcat(parser, "}\n\n");
-						fputs(parser, fparsers);
+						fputs(parser, fparsers_h);
 
 						//iterate
 						object = object->next;
@@ -254,10 +369,11 @@ void generate_types_and_structures(
 					}
 					// object type is object
 					if (strcmp(object_type->valuestring, 
-								"object") == 0){
+								"object") == 0 || cJSON_IsObject(cJSON_GetObjectItem(object, "properties")))
+					{
 						sprintf(str, "typedef struct %s %s_t;\n", 
 								object->string, object->string);
-						fputs(str, ftypes);
+						fputs(str, fstructures_h);
 
 						// make structure
 						printf("Generate structure: %s\n", object->string);
@@ -298,6 +414,7 @@ void generate_types_and_structures(
 									if (strcmp(type->valuestring, 
 												"integer") == 0)
 									{
+										// structure
 										char * fint = "int";
 										cJSON *format =
 												cJSON_GetObjectItem(property, "format");
@@ -325,7 +442,7 @@ void generate_types_and_structures(
 												object->string, property->string,
 												object->string, fint,
 												property->string);
-										fputs(setter, fsetgets);
+										fputs(setter, fsetgets_h);
 										
 										//getter
 										sprintf(setter, 
@@ -335,7 +452,7 @@ void generate_types_and_structures(
 												fint, object->string, 
 												property->string, object->string,
 												property->string);
-										fputs(setter, fsetgets);
+										fputs(setter, fsetgets_h);
 										
 										// parser
 										sprintf(parser, 
@@ -353,6 +470,7 @@ void generate_types_and_structures(
 									else if (strcmp(type->valuestring, 
 												"string") == 0)
 									{
+										// structure
 										sprintf(str, "%s\tchar * %s_; ", 
 												str, property->string);
 										if (description)
@@ -368,7 +486,7 @@ void generate_types_and_structures(
 												object->string, property->string,
 												object->string,
 												property->string);
-										fputs(setter, fsetgets);
+										fputs(setter, fsetgets_h);
 										
 										//getter
 										sprintf(setter, 
@@ -378,7 +496,7 @@ void generate_types_and_structures(
 												object->string, 
 												property->string, object->string,
 												property->string);
-										fputs(setter, fsetgets);
+										fputs(setter, fsetgets_h);
 							
 										// alloc
 										sprintf(allocator, 
@@ -405,6 +523,7 @@ void generate_types_and_structures(
 									else if (strcmp(type->valuestring, 
 												"boolean") == 0)
 									{
+										// structure
 										sprintf(str, "%s\tbool %s_; ", 
 												str, property->string);
 										if (description)
@@ -420,7 +539,7 @@ void generate_types_and_structures(
 												object->string, property->string,
 												object->string,
 												property->string);
-										fputs(setter, fsetgets);
+										fputs(setter, fsetgets_h);
 										
 										//getter
 										sprintf(setter, 
@@ -430,7 +549,7 @@ void generate_types_and_structures(
 												object->string, 
 												property->string, object->string,
 												property->string);
-										fputs(setter, fsetgets);
+										fputs(setter, fsetgets_h);
 										
 										// alloc
 										sprintf(allocator, 
@@ -452,6 +571,7 @@ void generate_types_and_structures(
 									else if (strcmp(type->valuestring, 
 												"array") == 0)
 									{
+										// structure
 										// get array items
 										cJSON *items = 
 												cJSON_GetObjectItem(property, "items");
@@ -537,7 +657,7 @@ void generate_types_and_structures(
 													property->string,
 													property->string, 
 													property->string);
-											fputs(setter, fsetgets);
+											fputs(setter, fsetgets_h);
 											
 											//getter
 											sprintf(setter, 
@@ -551,7 +671,7 @@ void generate_types_and_structures(
 													property->string, object->string,
 													property->string,
 													property->string);
-											fputs(setter, fsetgets);
+											fputs(setter, fsetgets_h);
 											
 											// alloc
 											sprintf(allocator, 
@@ -620,7 +740,7 @@ void generate_types_and_structures(
 												object->string, 
 												last_comp(ref->valuestring),
 												property->string);
-										fputs(setter, fsetgets);
+										fputs(setter, fsetgets_h);
 										
 										//getter
 										sprintf(setter, 
@@ -631,7 +751,7 @@ void generate_types_and_structures(
 												object->string, 
 												property->string, object->string,
 												property->string);
-										fputs(setter, fsetgets);
+										fputs(setter, fsetgets_h);
 										
 										// alloc
 										sprintf(allocator, 
@@ -660,19 +780,19 @@ void generate_types_and_structures(
 							perror("no properties in object");
 						
 						// close struct and write 
-						strcat(str, "%s};\n\n");
-						fputs(str, fstructures);
+						strcat(str, "};\n\n");
+						fputs(str, fstructures_def_h);
 						// close mems and write 
 						strcat(allocator, "\treturn object;\n}\n");
 						sprintf(dealloc, 
 								"%s\tif (object) %s_free(object);\n}\n\n",
 								dealloc, object->string);
-						fputs(allocator, fmems);
-						fputs(dealloc, fmems);
+						fputs(allocator, fmems_h);
+						fputs(dealloc, fmems_h);
 
 						// close parser and write
 						strcat(parser, "\treturn object;\n}\n\n");  
-						fputs(parser, fparsers);
+						fputs(parser, fparsers_h);
 					}
 				}
 				//iterate
@@ -687,94 +807,140 @@ void generate_types_and_structures(
 int main(int argc, char *argv[])
 {
 	int i;
-	FILE *ftypes, 
-			 *fstrucutures, 
-			 *fmethods, 
-			 *fversion, 
-			 *fresponses, 
-			 *fsetgets, 
-			 *fmems, 
-			 *fparsers;
-	const char htypes[]       = "types.h",
-						 hversion[]     = "version.h",
-						 hstructures[]  = "structures.h",
-						 hresponses[]   = "responses.h",
-						 hsetgets[]     = "setgets.h",
-						 hparsers[]     = "parsers.h",
-						 hmethods[]     = "methods.h",
-						 hmems[]        = "mems.h";
+	FILE *ftypes_h, 
+			 *frefs_h,
+			 *fversion_h, 
+			 *fstructures_h, 
+			 *fstructures_def_h, 
+			 *fmethods_h, 
+			 *fmethods_c, 
+			 *fresponses_h, 
+			 *fresponses_c, 
+			 *fsetgets_h, 
+			 *fmems_h, 
+			 *farrays_h,
+			 *fparsers_h;
+	const char types_h[]          = "types.h",
+						 refs_h[]           = "refs.h",
+						 version_h[]        = "version.h",
+						 structures_h[]     = "structures.h",
+						 structures_def_h[] = "structures_def.h",
+						 methods_h[]        = "methods.h",
+						 methods_c[]        = "methods.c",
+						 responses_h[]      = "responses.h",
+						 responses_c[]      = "responses.c",
+						 setgets_h[]        = "setgets.h",
+						 mems_h[]           = "mems.h",
+						 arrays_h[]         = "arrays.h",
+						 parsers_h[]        = "parsers.h";
 
 	// remove files
-	remove(htypes);
-	remove(hversion);
-	remove(hstructures);
-	remove(hmethods);
-	remove(hresponses);
-	remove(hsetgets);
-	remove(hparsers);
-	remove(hmems);
-
+	remove (types_h);     
+  remove (refs_h);      
+  remove (version_h);   
+  remove (structures_h);
+  remove (structures_def_h);
+  remove (methods_h);   
+  remove (methods_c);   
+  remove (responses_h); 
+  remove (responses_c); 
+  remove (setgets_h);   
+  remove (mems_h);      
+  remove (arrays_h);      
+  remove (parsers_h);    
+	
 	// opnen new streams
-	ftypes       = fopen(htypes,      "w");
-	fversion     = fopen(hversion,    "w");
-	fstrucutures = fopen(hstructures, "w");
-	fmethods     = fopen(hmethods,    "w");
-	fresponses   = fopen(hresponses,  "w");
-	fsetgets     = fopen(hsetgets,    "w");
-	fparsers     = fopen(hparsers,    "w");
-	fmems        = fopen(hmems,       "w");
-	if (!ftypes || !fstrucutures || !fmethods 
-							|| !fversion     || !fresponses 
-							|| !fsetgets ||!fmems     || !fparsers)
+	ftypes_h          = fopen(types_h,          "w");
+  frefs_h           = fopen(refs_h,           "w");
+  fversion_h        = fopen(version_h,        "w");
+  fstructures_h     = fopen(structures_h,     "w");
+  fstructures_def_h = fopen(structures_def_h, "w");
+  fmethods_h        = fopen(methods_h,        "w");
+  fmethods_c        = fopen(methods_c,        "w");
+  fresponses_h      = fopen(responses_h,      "w");
+  fresponses_c      = fopen(responses_c,      "w");
+  fsetgets_h        = fopen(setgets_h,        "w");
+  fmems_h           = fopen(mems_h,           "w");
+  farrays_h         = fopen(arrays_h,         "w");
+  fparsers_h        = fopen(parsers_h,        "w");
+
+	if (
+		   !ftypes_h  
+		|| !frefs_h 
+		|| !fversion_h  
+		|| !fstructures_h
+		|| !fstructures_def_h
+		|| !fmethods_h  
+		|| !fmethods_c  
+		|| !fresponses_h
+		|| !fresponses_c
+		|| !fsetgets_h  
+		|| !fmems_h  
+		|| !farrays_h  
+		|| !fparsers_h   
+		)
 	{
 		perror("cant't open streams");
 		return -1;
 	}
 
 	// put start strings to streams
-	fputs("#ifndef VK_TYPES_H\n", ftypes);
-	fputs("#define VK_TYPES_H\n", ftypes);
-	fputs("\n", ftypes);
+	fputs("#ifndef VK_TYPES_H\n", ftypes_h);
+	fputs("#include <stdbool.h>\n", ftypes_h);
+	fputs("#include <stdint.h>\n", ftypes_h);
+	fputs("\n", ftypes_h);
+	fputs("typedef int32_t int32;\n", ftypes_h);
+	fputs("typedef uint32_t uint32;\n", ftypes_h);
+	fputs("typedef int64_t int64;\n", ftypes_h);
+	fputs("typedef uint64_t uint64;\n", ftypes_h);
+	fputs("\n", ftypes_h);
 
-	fputs("#ifndef VK_STRUCTURES_H\n", fstrucutures);
-	fputs("#define VK_STRUCTURES_H\n", fstrucutures);
-	fputs("#include \"types.h\"\n", fstrucutures);
-	fputs("#include <stdbool.h>\n", fstrucutures);
-	fputs("#include <stdint.h>\n", fstrucutures);
-	fputs("\n", fstrucutures);
-	fputs("typedef int32_t int32;\n", fstrucutures);
-	fputs("typedef uint32_t uint32;\n", fstrucutures);
-	fputs("typedef int64_t int64;\n", fstrucutures);
-	fputs("typedef uint64_t uint64;\n", fstrucutures);
-	fputs("\n", fstrucutures);
+	fputs("#ifndef VK_STRUCTURES_H\n", fstructures_h);
+	fputs("#define VK_STRUCTURES_H\n", fstructures_h);
+	fputs("#include \"types.h\"\n", fstructures_h);
+	fputs("\n", fstructures_h);
 	
-	fputs("#ifndef VK_RESPONSES_H\n", fresponses);
-	fputs("#define VK_RESPONSES_H\n", fresponses);
-	fputs("\n", fresponses);
+	fputs("#ifndef VK_ARRAYS_H\n", farrays_h);
+	fputs("#define VK_ARRAYS_H\n", farrays_h);
+	fputs("#include \"structures.h\"\n", farrays_h);
+	fputs("\n", farrays_h);
 
-	fputs("#ifndef VK_SETTERS_H\n", fsetgets);
-	fputs("#define VK_SETTERS_H\n", fsetgets);
-	fputs("#include \"structures.h\"\n", fsetgets);
-	fputs("#include <string.h>\n", fsetgets);
-	fputs("\n", fsetgets);
+	fputs("#ifndef VK_REFS_H\n", frefs_h);
+	fputs("#define VK_REFS_H\n", frefs_h);
+	fputs("#include \"arrays.h\"\n", frefs_h);
+	fputs("\n", frefs_h);
+
+	fputs("#ifndef VK_STRUCTURES_DEF_H\n", fstructures_def_h);
+	fputs("#define VK_STRUCTURES_DEF_H\n", fstructures_def_h);
+	fputs("#include \"refs.h\"\n", fstructures_def_h);
+	fputs("\n", fstructures_def_h);
 	
-	fputs("#ifndef VK_MEMS_H\n", fmems);
-	fputs("#define VK_MEMS_H\n", fmems);
-	fputs("#include \"structures.h\"\n", fmems);
-	fputs("#include <stdio.h>\n", fmems);
-	fputs("#include <stdlib.h>\n", fmems);
-	fputs("\n", fmems);
+	fputs("#ifndef VK_RESPONSES_H\n", fresponses_h);
+	fputs("#define VK_RESPONSES_H\n", fresponses_h);
+	fputs("\n", fresponses_h);
 
-	fputs("#ifndef VK_PARSERS_H\n", fparsers);
-	fputs("#define VK_PARSERS_H\n", fparsers);
-	fputs("#include \"structures.h\"\n", fparsers);
-	fputs("#include <stdio.h>\n", fparsers);
-	fputs("#include <string.h>\n", fparsers);
-	fputs("#include \"mems.h\"\n", fparsers);
-	fputs("#include \"cJSON.h\"\n", fparsers);
-	fputs("\n", fparsers);
+	fputs("#ifndef VK_SETTERS_H\n", fsetgets_h);
+	fputs("#define VK_SETTERS_H\n", fsetgets_h);
+	fputs("#include \"structures.h\"\n", fsetgets_h);
+	fputs("#include <string.h>\n", fsetgets_h);
+	fputs("\n", fsetgets_h);
 	
+	fputs("#ifndef VK_MEMS_H\n", fmems_h);
+	fputs("#define VK_MEMS_H\n", fmems_h);
+	fputs("#include \"structures.h\"\n", fmems_h);
+	fputs("#include <stdio.h>\n", fmems_h);
+	fputs("#include <stdlib.h>\n", fmems_h);
+	fputs("\n", fmems_h);
 
+	fputs("#ifndef VK_PARSERS_H\n", fparsers_h);
+	fputs("#define VK_PARSERS_H\n", fparsers_h);
+	fputs("#include \"structures.h\"\n", fparsers_h);
+	fputs("#include <stdio.h>\n", fparsers_h);
+	fputs("#include <string.h>\n", fparsers_h);
+	fputs("#include \"mems.h\"\n", fparsers_h);
+	fputs("#include \"cJSON.h\"\n", fparsers_h);
+	fputs("\n", fparsers_h);
+	
 	// open api
 	char api_package_path[128];
 	sprintf(api_package_path, "%s/package.json", API_PATH);
@@ -794,7 +960,7 @@ int main(int argc, char *argv[])
 						"\t#define VK_API \"%s\"\n" 
 						"#endif\n",	
 						version->valuestring);
-				fwrite(str, strlen(str), 1, fversion);
+				fwrite(str, strlen(str), 1, fversion_h);
 			} else 
 				perror("api schema package.json has no version");
 			cJSON_free(api_package_json);
@@ -825,11 +991,14 @@ int main(int argc, char *argv[])
 					if ((fp = fopen(objects_path, "r"))){
 						generate_types_and_structures(
 								fp, 
-								ftypes, 
-								fstrucutures,
-								fsetgets,
-								fmems,
-								fparsers
+								ftypes_h, 
+								farrays_h, 
+								frefs_h, 
+								fstructures_h,
+								fstructures_def_h,
+								fsetgets_h,
+								fmems_h,
+								fparsers_h
 								);
 						fclose(fp);
 					}
@@ -840,7 +1009,7 @@ int main(int argc, char *argv[])
 					char responses_path[256];
 					sprintf(objects_path, "%s/responses.json", sect_path);
 					if ((fp = fopen(responses_path, "r"))){
-						generate_responses(fp, fresponses);
+						generate_responses(fp, fresponses_h);
 						fclose(fp);
 					}
 					else {
@@ -853,21 +1022,30 @@ int main(int argc, char *argv[])
 		perror("can't open VK API SCHEMA Directory");
 
 	// close streams
-	fputs("#endif //VK_TYPES_H\n", ftypes);
-	fputs("#endif //VK_STRUCTURES_H\n", fstrucutures);
-	fputs("#endif //VK_RESPONSES_H\n", fresponses);
-	fputs("#endif //VK_SETTERS_H\n", fsetgets);
-	fputs("#endif //VK_PARSERS_H\n", fparsers);
-	fputs("#endif //VK_MEMS_H\n", fmems);
+	fputs("#endif //VK_TYPES_H\n", ftypes_h);
+	fputs("#endif //VK_REFS_H\n", frefs_h);
+	fputs("#endif //VK_ARRAYS_H\n", farrays_h);
+	fputs("#endif //VK_STRUCTURES_H\n", fstructures_h);
+	fputs("#endif //VK_STRUCTURES_DEF_H\n", fstructures_def_h);
+	fputs("#endif //VK_RESPONSES_H\n", fresponses_h);
+	fputs("#endif //VK_SETTERS_H\n", fsetgets_h);
+	fputs("#endif //VK_PARSERS_H\n", fparsers_h);
+	fputs("#endif //VK_MEMS_H\n", fmems_h);
 	
-	fclose(ftypes);
-	fclose(fversion);
-	fclose(fstrucutures);
-	fclose(fresponses);
-	fclose(fmethods);
-	fclose(fsetgets);
-	fclose(fparsers);
-	fclose(fmems);
+
+	fclose(ftypes_h); 
+	fclose(frefs_h); 
+	fclose(fversion_h);  
+	fclose(fstructures_h);
+	fclose(fstructures_def_h);
+	fclose(fmethods_h);  
+	fclose(fmethods_c);  
+	fclose(fresponses_h);
+	fclose(fresponses_c);
+	fclose(fsetgets_h);  
+	fclose(fmems_h);  
+	fclose(farrays_h);  
+	fclose(fparsers_h);   
 
 	return 0;
 }
