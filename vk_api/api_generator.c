@@ -126,7 +126,461 @@ void generate_types_and_structures(
 					object = object->next;
 					continue;
 				}
-				
+				// object type is object if has properties or allOf
+					if (cJSON_GetObjectItem(object, "properties") 
+					|| cJSON_GetObjectItem(object, "oneOf")
+					|| cJSON_GetObjectItem(object, "allOf")
+					)
+					{
+						sprintf(str, "typedef struct %s %s_t;\n", 
+								object->string, object->string);
+						fputs(str, fstructures_h);
+
+						// make structure
+						printf("Generate structure: %s\n", object->string);
+						sprintf(str, "struct %s{\n", object->string);
+						
+						// make alloc
+						sprintf(allocator, 
+								"static %s_t * %s_new(){\n" 
+								"\t%s_t *object = (%s_t *)malloc(sizeof(%s_t));\n"
+								"\tif(!object) {perror(\"malloc\"); return NULL;}\n",
+								object->string, object->string,
+								object->string, object->string, object->string);
+
+						// make dealloc
+						sprintf(dealloc, 
+								"static void %s_free(%s_t *object){\n", 
+								object->string, object->string);
+
+						// make parser
+						sprintf(parser, 
+								"static %s_t * %s_from_json(cJSON *json){\n" 
+								"\t%s_t *object = %s_new();\n"
+								"\tif(!object) return NULL;\n", 
+								object->string, object->string,
+								object->string, object->string);
+						
+						cJSON *properties =
+								cJSON_GetObjectItem(object, "properties");
+						
+						cJSON *allOf =
+								cJSON_GetObjectItem(object, "allOf");
+
+						if (allOf)
+							properties = allOf->child;
+						
+						cJSON *oneOf =
+								cJSON_GetObjectItem(object, "oneOf");
+						
+						if (oneOf)
+							properties = oneOf->child;
+
+						while (properties){
+							cJSON *property = properties->child;
+							while (property) {
+								cJSON *type =
+										cJSON_GetObjectItem(property, "type");
+								cJSON *description =
+										cJSON_GetObjectItem(property, "description");
+								if (type){
+									// integer type
+									if (strcmp(type->valuestring, 
+												"integer") == 0)
+									{
+										// structure
+										char * fint = "int";
+										cJSON *format =
+												cJSON_GetObjectItem(property, "format");
+										if (format)
+											fint = format->valuestring;
+										sprintf(str, "%s\t%s _%s; ", 
+												str, 
+												fint,
+												property->string);
+										if (description)
+											sprintf(str, "%s//%s", 
+													str, description->valuestring);
+										strcat(str, "\n");
+										
+										// alloc
+										sprintf(allocator, 
+												"%s\tobject->_%s = 0;\n",
+												allocator, property->string); 
+
+										// setter
+										sprintf(setter, 
+												"static void %s_set_%s(%s_t *object, %s value){\n"
+												"\tobject->_%s = value;\n"
+												"}\n\n",
+												object->string, property->string,
+												object->string, fint,
+												property->string);
+										fputs(setter, fsetgets_h);
+										
+										//getter
+										sprintf(setter, 
+												"static %s %s_get_%s(%s_t *object){\n"
+												"\treturn object->_%s;\n"
+												"}\n\n",
+												fint, object->string, 
+												property->string, object->string,
+												property->string);
+										fputs(setter, fsetgets_h);
+										
+										// parser
+										sprintf(parser, 
+												"%s\tcJSON * %s_json =\n"
+												"\t\t\tcJSON_GetObjectItem(json, \"%s\");\n" 
+												"\tif(%s_json)\n"
+												"\t\tobject->_%s = %s_json->valueint;\n",
+											parser, 
+											property->string, property->string,
+											property->string,
+											property->string, property->string);
+									}
+									
+									// string type
+									else if (strcmp(type->valuestring, 
+												"string") == 0)
+									{
+										// structure
+										sprintf(str, "%s\tchar * _%s; ", 
+												str, property->string);
+										if (description)
+											sprintf(str, "%s//%s", 
+													str, description->valuestring);
+										strcat(str, "\n");
+										
+										// setter
+										sprintf(setter, 
+												"static void %s_set_%s(%s_t *object, const char * value){\n"
+												"\tobject->_%s = strdup(value);\n"
+												"}\n\n",
+												object->string, property->string,
+												object->string,
+												property->string);
+										fputs(setter, fsetgets_h);
+										
+										//getter
+										sprintf(setter, 
+												"static const char * %s_get_%s(%s_t *object){\n"
+												"\treturn object->_%s;\n"
+												"}\n\n",
+												object->string, 
+												property->string, object->string,
+												property->string);
+										fputs(setter, fsetgets_h);
+							
+										// alloc
+										sprintf(allocator, 
+												"%s\tobject->_%s = NULL;\n",
+												allocator, property->string); 
+
+										// dealloc
+										sprintf(dealloc, 
+												"%s\tif (object->_%s) free(object->_%s);\n", 
+												dealloc, property->string, property->string);
+
+										// parser
+										sprintf(parser, 
+												"%s\tcJSON * %s_json =\n"
+												"\t\t\tcJSON_GetObjectItem(json, \"%s\");\n" 
+												"\tif(%s_json)\n"
+												"\t\tobject->_%s = strdup(%s_json->valuestring);\n",
+											parser, 
+											property->string, property->string,
+											property->string,
+											property->string, property->string);
+									}
+									// boolean type
+									else if (strcmp(type->valuestring, 
+												"boolean") == 0)
+									{
+										// structure
+										sprintf(str, "%s\tbool _%s; ", 
+												str, property->string);
+										if (description)
+											sprintf(str, "%s//%s", 
+													str, description->valuestring);
+										strcat(str, "\n");
+										
+										// setter
+										sprintf(setter, 
+												"static void %s_set_%s(%s_t *object, bool value){\n"
+												"\tobject->_%s = value;\n"
+												"}\n\n",
+												object->string, property->string,
+												object->string,
+												property->string);
+										fputs(setter, fsetgets_h);
+										
+										//getter
+										sprintf(setter, 
+												"static bool %s_get_%s(%s_t *object){\n"
+												"\treturn object->_%s;\n"
+												"}\n\n",
+												object->string, 
+												property->string, object->string,
+												property->string);
+										fputs(setter, fsetgets_h);
+										
+										// alloc
+										sprintf(allocator, 
+												"%s\tobject->_%s = false;\n",
+												allocator, property->string); 
+
+										// parser
+										sprintf(parser, 
+												"%s\tcJSON * %s_json =\n"
+												"\t\t\tcJSON_GetObjectItem(json, \"%s\");\n" 
+												"\tif(%s_json)\n"
+												"\t\tobject->_%s = %s_json->valueint;\n",
+											parser, 
+											property->string, property->string,
+											property->string,
+											property->string, property->string);
+									}
+									// array type
+									else if (strcmp(type->valuestring, "array") == 0)
+									{
+										// structure
+										// get array items
+										cJSON *items = cJSON_GetObjectItem(property, "items");
+										if (items){
+											const char *pointer = "";
+											cJSON *items_type = cJSON_GetObjectItem(items, "type");
+											if (items_type && strcmp(items_type->valuestring, "array")==0){
+												pointer = "**";
+												items = cJSON_GetObjectItem(items, "items");
+											}
+											// items may have ref or type
+											const char *array_type = NULL;
+											const char *jsonvalue = NULL;
+											const char *free_value = NULL;
+											// check if ref
+											cJSON *items_ref =
+													cJSON_GetObjectItem(items, "$ref");
+											if (items_ref){
+												char arraytyperef[128];
+												sprintf(arraytyperef, "%s_t %s*", 
+														last_comp(items_ref->valuestring), pointer);
+												array_type = arraytyperef; 
+												
+												char jsonvalueref[128];
+												sprintf(jsonvalueref, "%s_from_json(item)", 
+														last_comp(items_ref->valuestring));
+												jsonvalue = jsonvalueref;
+												
+												char freevalueref[128];
+												sprintf(freevalueref, "%s_free(item)", 
+														last_comp(items_ref->valuestring));
+												free_value = freevalueref;
+											}
+											// check if type
+											if (items_type){
+												if (strcmp(items_type->valuestring, "integer") == 0)
+												{
+													// check int format
+													char arraytyperef[128];
+													sprintf(arraytyperef, "int %s", pointer); 
+													array_type = arraytyperef; 
+													cJSON *format =
+															cJSON_GetObjectItem(items, "format");
+													if (format)
+														array_type = format->valuestring;
+													jsonvalue = ("item->valueint");
+													free_value = "";
+												}
+												else if (strcmp(
+															items_type->valuestring, "string") == 0)
+												{
+													char arraytyperef[128];
+													sprintf(arraytyperef, "char *%s", pointer); 
+													array_type = arraytyperef; 
+													jsonvalue = ("item->valuestring");
+													free_value = "free(item)";
+												}
+												else if (strcmp(
+															items_type->valuestring, "boolean") == 0)
+												{
+													char arraytyperef[128];
+													sprintf(arraytyperef, "bool %s", pointer); 
+													array_type = arraytyperef; 
+													jsonvalue = ("item->valueint");
+													free_value = "";
+												}
+											}
+											sprintf(str, "%s\t%s * _%s; ", 
+													str, array_type, property->string);
+											if (description)
+												sprintf(str, "%s//%s", 
+														str, description->valuestring);
+											strcat(str, "\n");
+											// add array len
+											sprintf(str, "%s\tint _%s_len; ", 
+													str, property->string);
+											strcat(str, "\n");
+											
+											// setter
+											sprintf(setter, 
+													"static void %s_set_%s(%s_t *object, %s * value, int len){\n"
+													"\tint i;\n"
+													"\tobject->_%s = malloc(len * sizeof(%s));\n"
+													"\tif(!object->_%s) {perror(\"malloc\"); return;}\n" 
+													"\tfor(i=0;i<len;++i){\n"
+													"\t\tobject->_%s[i] = value[i];\n"
+													"\t}\n"
+													"\tobject->_%s_len = len;\n"
+													"}\n\n",
+													object->string, property->string, object->string, array_type,
+													property->string, array_type,
+													property->string,
+													property->string, 
+													property->string);
+											fputs(setter, fsetgets_h);
+											
+											//getter
+											sprintf(setter, 
+													"static %s * %s_get_%s(%s_t *object, int *len){\n"
+													"\tif (len)\n"
+													"\t\t*len = object->_%s_len;\n"
+													"\treturn object->_%s;\n"
+													"}\n\n",
+													array_type,
+													object->string, 
+													property->string, object->string,
+													property->string,
+													property->string);
+											fputs(setter, fsetgets_h);
+											
+											// alloc
+											sprintf(allocator, 
+													"%s\tobject->_%s = NULL;\n",
+													allocator, property->string); 
+
+											// dealloc
+											sprintf(dealloc, 
+													"%s\tif (object->_%s){\n"
+													"\t\tint i;\n"
+													"\t\tfor (i=0; i<object->_%s_len; i++){\n"
+													"\t\t\t%s item = object->_%s[i];\n"
+													"\t\t\t%s;\n"
+													"\t\t}\n"
+													"\t}\n", 
+													dealloc, property->string, 
+													property->string,
+													array_type, property->string,
+													free_value);
+
+											// parser
+											sprintf(parser, 
+													"%s\tcJSON * %s_json =\n"
+													"\t\t\tcJSON_GetObjectItem(json, \"%s\");\n" 
+													"\tif(%s_json){\n"
+													"\t\tint i, len = cJSON_GetArraySize(%s_json);\n"
+													"\t\tobject->_%s = malloc(len * sizeof(%s_t));\n"
+													"\t\tif(!object->_%s) {perror(\"malloc\"); return NULL;}\n" 
+													"\t\tfor(i=0;i<len;++i){\n"
+													"\t\t\tcJSON *item = cJSON_GetArrayItem(%s_json, i);\n"
+													"\t\t\tobject->_%s[i] = %s;\n"
+													"\t\t}\n"
+													"\t\tobject->_%s_len = len;\n"
+													"\t}\n",
+												parser, property->string, 
+												property->string,
+												property->string,
+												property->string,
+												property->string, property->string,
+												property->string,
+												property->string,
+												property->string, jsonvalue,
+												property->string);
+										}
+										perror("type is array, but no items");
+									}
+								} else {
+									cJSON *ref =
+											cJSON_GetObjectItem(property, "$ref");
+									if (ref){
+											sprintf(str, "%s\t%s_t * _%s; ", 
+												str,
+												last_comp(ref->valuestring),
+												property->string);
+										if (description)
+											sprintf(str, "%s//%s", 
+													str, description->valuestring);
+										strcat(str, "\n");
+										
+										// setter
+										sprintf(setter, 
+												"static void %s_set_%s(%s_t *object, %s_t * value){\n"
+												"\tobject->_%s = value;\n"
+												"}\n\n",
+												object->string, property->string,
+												object->string, 
+												last_comp(ref->valuestring),
+												property->string);
+										fputs(setter, fsetgets_h);
+										
+										//getter
+										sprintf(setter, 
+												"static %s_t * %s_get_%s(%s_t *object){\n"
+												"\treturn object->_%s;\n"
+												"}\n\n",
+												last_comp(ref->valuestring),
+												object->string, 
+												property->string, object->string,
+												property->string);
+										fputs(setter, fsetgets_h);
+										
+										// alloc
+										sprintf(allocator, 
+												"%s\tobject->_%s = NULL;\n",
+												allocator, property->string); 
+										
+										// dealloc
+										sprintf(parser, 
+												"%s\t%s_free(object->_%s);\n", 
+												dealloc, 
+												last_comp(ref->valuestring),
+												property->string);
+
+										// parser
+										sprintf(parser, 
+												"%s\tobject->_%s = %s_from_json(item);\n", 
+												parser, property->string,
+												last_comp(ref->valuestring));
+									}
+								}
+
+								// iterate
+								property = property->next;
+							}
+							//iterate properties
+							properties = properties->next;
+							if (properties){
+								if (cJSON_GetObjectItem(properties, "properties")){
+									properties = cJSON_GetObjectItem(properties, "properties");
+								}
+							}
+						}
+						
+						// close struct and write 
+						strcat(str, "};\n\n");
+						fputs(str, fstructures_def_h);
+						// close mems and write 
+						strcat(allocator, "\treturn object;\n}\n");
+						sprintf(dealloc, 
+								"%s\tif (object) %s_free(object);\n}\n\n",
+								dealloc, object->string);
+						fputs(allocator, fmems_h);
+						fputs(dealloc, fmems_h);
+
+						// close parser and write
+						strcat(parser, "\treturn object;\n}\n\n");  
+						fputs(parser, fparsers_h);
+					}
 				// get object type
 				cJSON *object_type =
 						cJSON_GetObjectItem(object, "type");
@@ -227,9 +681,9 @@ void generate_types_and_structures(
 									// array of structures
 									char array_struct[128] = {0};
 									strcat(array_struct, "struct {");
-									int i;
-									for (i = 0; i < cJSON_GetArraySize(items_type); ++i) {
-										cJSON *items_type_item = cJSON_GetArrayItem(items_type, i);		
+									cJSON *items_type_item;
+									int i=0;
+									for (items_type_item=items_type->child; items_type_item; items_type_item=items_type_item->next) {
 										if (strcmp(items_type_item->valuestring, "string") == 0){
 											sprintf(array_struct, "%schar * v%d; ", array_struct, i);
 										} 
@@ -239,6 +693,7 @@ void generate_types_and_structures(
 										else if (strcmp(items_type_item->valuestring, "boolean") == 0){
 											sprintf(array_struct, "%sbool v%d; ", array_struct, i);
 										}
+										i++;
 									}
 									strcat(array_struct, "} *");
 									array_type = array_struct;
@@ -367,433 +822,7 @@ void generate_types_and_structures(
 						object = object->next;
 						continue;
 					}
-					// object type is object
-					if (strcmp(object_type->valuestring, 
-								"object") == 0 || cJSON_IsObject(cJSON_GetObjectItem(object, "properties")))
-					{
-						sprintf(str, "typedef struct %s %s_t;\n", 
-								object->string, object->string);
-						fputs(str, fstructures_h);
-
-						// make structure
-						printf("Generate structure: %s\n", object->string);
-						sprintf(str, "struct %s{\n", object->string);
-						
-						// make alloc
-						sprintf(allocator, 
-								"static %s_t * %s_new(){\n" 
-								"\t%s_t *object = (%s_t *)malloc(sizeof(%s_t));\n"
-								"\tif(!object) {perror(\"malloc\"); return NULL;}\n",
-								object->string, object->string,
-								object->string, object->string, object->string);
-
-						// make dealloc
-						sprintf(dealloc, 
-								"static void %s_free(%s_t *object){\n", 
-								object->string, object->string);
-
-						// make parser
-						sprintf(parser, 
-								"static %s_t * %s_from_json(cJSON *json){\n" 
-								"\t%s_t *object = %s_new();\n"
-								"\tif(!object) return NULL;\n", 
-								object->string, object->string,
-								object->string, object->string);
-						
-						cJSON *properties =
-								cJSON_GetObjectItem(object, "properties");
-						if (properties){
-							cJSON *property = properties->child;
-							while (property) {
-								cJSON *type =
-										cJSON_GetObjectItem(property, "type");
-								cJSON *description =
-										cJSON_GetObjectItem(property, "description");
-								if (type){
-									// integer type
-									if (strcmp(type->valuestring, 
-												"integer") == 0)
-									{
-										// structure
-										char * fint = "int";
-										cJSON *format =
-												cJSON_GetObjectItem(property, "format");
-										if (format)
-											fint = format->valuestring;
-										sprintf(str, "%s\t%s %s_; ", 
-												str, 
-												fint,
-												property->string);
-										if (description)
-											sprintf(str, "%s//%s", 
-													str, description->valuestring);
-										strcat(str, "\n");
-										
-										// alloc
-										sprintf(allocator, 
-												"%s\tobject->%s_ = 0;\n",
-												allocator, property->string); 
-
-										// setter
-										sprintf(setter, 
-												"static void %s_set_%s(%s_t *object, %s value){\n"
-												"\tobject->%s_ = value;\n"
-												"}\n\n",
-												object->string, property->string,
-												object->string, fint,
-												property->string);
-										fputs(setter, fsetgets_h);
-										
-										//getter
-										sprintf(setter, 
-												"static %s %s_get_%s(%s_t *object){\n"
-												"\treturn object->%s_;\n"
-												"}\n\n",
-												fint, object->string, 
-												property->string, object->string,
-												property->string);
-										fputs(setter, fsetgets_h);
-										
-										// parser
-										sprintf(parser, 
-												"%s\tcJSON * %s_json =\n"
-												"\t\t\tcJSON_GetObjectItem(json, \"%s\");\n" 
-												"\tif(%s_json)\n"
-												"\t\tobject->%s_ = %s_json->valueint;\n",
-											parser, 
-											property->string, property->string,
-											property->string,
-											property->string, property->string);
-									}
-									
-									// string type
-									else if (strcmp(type->valuestring, 
-												"string") == 0)
-									{
-										// structure
-										sprintf(str, "%s\tchar * %s_; ", 
-												str, property->string);
-										if (description)
-											sprintf(str, "%s//%s", 
-													str, description->valuestring);
-										strcat(str, "\n");
-										
-										// setter
-										sprintf(setter, 
-												"static void %s_set_%s(%s_t *object, const char * value){\n"
-												"\tobject->%s_ = strdup(value);\n"
-												"}\n\n",
-												object->string, property->string,
-												object->string,
-												property->string);
-										fputs(setter, fsetgets_h);
-										
-										//getter
-										sprintf(setter, 
-												"static const char * %s_get_%s(%s_t *object){\n"
-												"\treturn object->%s_;\n"
-												"}\n\n",
-												object->string, 
-												property->string, object->string,
-												property->string);
-										fputs(setter, fsetgets_h);
-							
-										// alloc
-										sprintf(allocator, 
-												"%s\tobject->%s_ = NULL;\n",
-												allocator, property->string); 
-
-										// dealloc
-										sprintf(dealloc, 
-												"%s\tif (object->%s_) free(object->%s_);\n", 
-												dealloc, property->string, property->string);
-
-										// parser
-										sprintf(parser, 
-												"%s\tcJSON * %s_json =\n"
-												"\t\t\tcJSON_GetObjectItem(json, \"%s\");\n" 
-												"\tif(%s_json)\n"
-												"\t\tobject->%s_ = strdup(%s_json->valuestring);\n",
-											parser, 
-											property->string, property->string,
-											property->string,
-											property->string, property->string);
-									}
-									// boolean type
-									else if (strcmp(type->valuestring, 
-												"boolean") == 0)
-									{
-										// structure
-										sprintf(str, "%s\tbool %s_; ", 
-												str, property->string);
-										if (description)
-											sprintf(str, "%s//%s", 
-													str, description->valuestring);
-										strcat(str, "\n");
-										
-										// setter
-										sprintf(setter, 
-												"static void %s_set_%s(%s_t *object, bool value){\n"
-												"\tobject->%s_ = value;\n"
-												"}\n\n",
-												object->string, property->string,
-												object->string,
-												property->string);
-										fputs(setter, fsetgets_h);
-										
-										//getter
-										sprintf(setter, 
-												"static bool %s_get_%s(%s_t *object){\n"
-												"\treturn object->%s_;\n"
-												"}\n\n",
-												object->string, 
-												property->string, object->string,
-												property->string);
-										fputs(setter, fsetgets_h);
-										
-										// alloc
-										sprintf(allocator, 
-												"%s\tobject->%s_ = false;\n",
-												allocator, property->string); 
-
-										// parser
-										sprintf(parser, 
-												"%s\tcJSON * %s_json =\n"
-												"\t\t\tcJSON_GetObjectItem(json, \"%s\");\n" 
-												"\tif(%s_json)\n"
-												"\t\tobject->%s_ = %s_json->valueint;\n",
-											parser, 
-											property->string, property->string,
-											property->string,
-											property->string, property->string);
-									}
-									// array type
-									else if (strcmp(type->valuestring, 
-												"array") == 0)
-									{
-										// structure
-										// get array items
-										cJSON *items = 
-												cJSON_GetObjectItem(property, "items");
-										if (items){
-											// items may have ref or type
-											const char *array_type = NULL;
-											const char *jsonvalue = NULL;
-											const char *free_value = NULL;
-											// check if ref
-											cJSON *items_ref =
-													cJSON_GetObjectItem(items, "$ref");
-											if (items_ref){
-												char arraytyperef[128];
-												sprintf(arraytyperef, "%s_t *", 
-														last_comp(items_ref->valuestring));
-												array_type = arraytyperef; 
-												
-												char jsonvalueref[128];
-												sprintf(jsonvalueref, "%s_from_json(item)", 
-														last_comp(items_ref->valuestring));
-												jsonvalue = jsonvalueref;
-												
-												char freevalueref[128];
-												sprintf(freevalueref, "%s_free(item)", 
-														last_comp(items_ref->valuestring));
-												free_value = freevalueref;
-											}
-											// check if type
-											cJSON *items_type =
-													cJSON_GetObjectItem(items, "type");
-											if (items_type){
-												if (strcmp(
-															items_type->valuestring, "integer") == 0)
-												{
-													// check int format
-													array_type = "int";
-													cJSON *format =
-															cJSON_GetObjectItem(items, "format");
-													if (format)
-														array_type = format->valuestring;
-													jsonvalue = ("item->valueint");
-													free_value = "";
-												}
-												else if (strcmp(
-															items_type->valuestring, "string") == 0)
-												{
-													array_type = "char *";
-													jsonvalue = ("item->valuestring");
-													free_value = "free(item)";
-												}
-												else if (strcmp(
-															items_type->valuestring, "boolean") == 0)
-												{
-													array_type = "bool";
-													jsonvalue = ("item->valueint");
-													free_value = "";
-												}
-											}
-											sprintf(str, "%s\t%s * %s_; ", 
-													str, array_type, property->string);
-											if (description)
-												sprintf(str, "%s//%s", 
-														str, description->valuestring);
-											strcat(str, "\n");
-											// add array len
-											sprintf(str, "%s\tint %s_len; ", 
-													str, property->string);
-											strcat(str, "\n");
-											
-											// setter
-											sprintf(setter, 
-													"static void %s_set_%s(%s_t *object, %s * value, int len){\n"
-													"int i;\n"
-													"\tobject->%s_ = malloc(len * sizeof(%s));\n"
-													"\tif(!object->%s_) {perror(\"malloc\"); return NULL;}\n" 
-													"\tfor(i=0;i<len;++i){\n"
-													"\t\tobject->%s[i] = value[i];\n"
-													"\t}\n"
-													"\tobject->%s_len = len;\n"
-													"}\n\n",
-													object->string, property->string, object->string, array_type,
-													property->string, array_type,
-													property->string,
-													property->string, 
-													property->string);
-											fputs(setter, fsetgets_h);
-											
-											//getter
-											sprintf(setter, 
-													"static %s * %s_get_%s(%s_t *object, int *len){\n"
-													"\tif (len)\n"
-													"\t\t*len = object->%s_len;\n"
-													"\treturn object->%s_;\n"
-													"}\n\n",
-													array_type,
-													object->string, 
-													property->string, object->string,
-													property->string,
-													property->string);
-											fputs(setter, fsetgets_h);
-											
-											// alloc
-											sprintf(allocator, 
-													"%s\tobject->%s_ = NULL;\n",
-													allocator, property->string); 
-
-											// dealloc
-											sprintf(dealloc, 
-													"%s\tif (object->%s_){\n"
-													"\t\tint i;\n"
-													"\t\tfor (i=0; i<object->%s_len; i++){\n"
-													"\t\t\t%s item = object->%s_[i];\n"
-													"\t\t\t%s;\n"
-													"\t\t}\n"
-													"\t}\n", 
-													dealloc, property->string, 
-													property->string,
-													array_type, property->string,
-													free_value);
-
-											// parser
-											sprintf(parser, 
-													"%s\tcJSON * %s_json =\n"
-													"\t\t\tcJSON_GetObjectItem(json, \"%s\");\n" 
-													"\tif(%s_json){\n"
-													"\t\tint i, len = cJSON_GetArraySize(%s_json);\n"
-													"\t\tobject->%s_ = malloc(len * sizeof(%s_t));\n"
-													"\t\tif(!object->%s_) {perror(\"malloc\"); return NULL;}\n" 
-													"\t\tfor(i=0;i<len;++i){\n"
-													"\t\t\tcJSON *item = cJSON_GetArrayItem(%s_json, i);\n"
-													"\t\t\tobject->%s[i] = %s;\n"
-													"\t\t}\n"
-													"\t\tobject->%s_len = len;\n"
-													"\t}\n",
-												parser, property->string, 
-												property->string,
-												property->string,
-												property->string,
-												property->string, property->string,
-												property->string,
-												property->string,
-												property->string, jsonvalue,
-												property->string);
-										}
-										perror("type is array, but no items");
-									}
-								} else {
-									cJSON *ref =
-											cJSON_GetObjectItem(property, "$ref");
-									if (ref){
-											sprintf(str, "%s\t%s_t * %s_; ", 
-												str,
-												last_comp(ref->valuestring),
-												property->string);
-										if (description)
-											sprintf(str, "%s//%s", 
-													str, description->valuestring);
-										strcat(str, "\n");
-										
-										// setter
-										sprintf(setter, 
-												"static void %s_set_%s(%s_t *object, %s_t * value){\n"
-												"\tobject->%s_ = value;\n"
-												"}\n\n",
-												object->string, property->string,
-												object->string, 
-												last_comp(ref->valuestring),
-												property->string);
-										fputs(setter, fsetgets_h);
-										
-										//getter
-										sprintf(setter, 
-												"static %s_t * %s_get_%s(%s_t *object){\n"
-												"\treturn object->%s_;\n"
-												"}\n\n",
-												last_comp(ref->valuestring),
-												object->string, 
-												property->string, object->string,
-												property->string);
-										fputs(setter, fsetgets_h);
-										
-										// alloc
-										sprintf(allocator, 
-												"%s\tobject->%s_ = NULL;\n",
-												allocator, property->string); 
-										
-										// dealloc
-										sprintf(parser, 
-												"%s\t%s_free(object->%s_);\n", 
-												dealloc, 
-												last_comp(ref->valuestring),
-												property->string);
-
-										// parser
-										sprintf(parser, 
-												"%s\tobject->%s_ = %s_from_json(item);\n", 
-												parser, property->string,
-												last_comp(ref->valuestring));
-									}
-								}
-
-								// iterate
-								property = property->next;
-							}
-						} else
-							perror("no properties in object");
-						
-						// close struct and write 
-						strcat(str, "};\n\n");
-						fputs(str, fstructures_def_h);
-						// close mems and write 
-						strcat(allocator, "\treturn object;\n}\n");
-						sprintf(dealloc, 
-								"%s\tif (object) %s_free(object);\n}\n\n",
-								dealloc, object->string);
-						fputs(allocator, fmems_h);
-						fputs(dealloc, fmems_h);
-
-						// close parser and write
-						strcat(parser, "\treturn object;\n}\n\n");  
-						fputs(parser, fparsers_h);
-					}
+					
 				}
 				//iterate
 				object = object->next;
@@ -921,13 +950,15 @@ int main(int argc, char *argv[])
 
 	fputs("#ifndef VK_SETTERS_H\n", fsetgets_h);
 	fputs("#define VK_SETTERS_H\n", fsetgets_h);
-	fputs("#include \"structures.h\"\n", fsetgets_h);
+	fputs("#include \"structures_def.h\"\n", fsetgets_h);
+	fputs("#include <stdio.h>\n", fsetgets_h);
+	fputs("#include <stdlib.h>\n", fsetgets_h);
 	fputs("#include <string.h>\n", fsetgets_h);
 	fputs("\n", fsetgets_h);
 	
 	fputs("#ifndef VK_MEMS_H\n", fmems_h);
 	fputs("#define VK_MEMS_H\n", fmems_h);
-	fputs("#include \"structures.h\"\n", fmems_h);
+	fputs("#include \"structures_def.h\"\n", fmems_h);
 	fputs("#include <stdio.h>\n", fmems_h);
 	fputs("#include <stdlib.h>\n", fmems_h);
 	fputs("\n", fmems_h);
