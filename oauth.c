@@ -2,7 +2,7 @@
  * File              : oauth.c
  * Author            : Igor V. Sementsov <ig.kuzm@gmail.com>
  * Date              : 11.08.2023
- * Last Modified Date: 17.08.2023
+ * Last Modified Date: 03.10.2024
  * Last Modified By  : Igor V. Sementsov <ig.kuzm@gmail.com>
  */
 
@@ -21,6 +21,137 @@
 #define OAUTH_URL "https://oauth.vk.com/authorize"
 #define TOKEN_URL "https://oauth.vk.com/access_token"
 
+static void acces_rigths_to_url(
+		uint32_t access_rights, char *buffer)
+{
+	char has = 0;
+	*buffer = 0;
+	if ((access_rights & AR_NOTIFY) == AR_NOTIFY){
+		strcat(buffer, "notify");
+		has = 1;
+	}   
+	if ((access_rights & AR_FRIENDS) == AR_FRIENDS){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "friends");
+		has = 1;
+	}
+  if ((access_rights & AR_PHOTOS) == AR_PHOTOS){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "photos");
+		has = 1;
+	}
+  if ((access_rights & AR_AUDIO) == AR_AUDIO){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "audio");
+		has = 1;
+	}
+  if ((access_rights & AR_VIDEO) == AR_VIDEO){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "video");
+		has = 1;
+	}
+  if ((access_rights & AR_STORIES) == AR_STORIES){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "stories");
+		has = 1;
+	}
+  if ((access_rights & AR_PAGES) == AR_PAGES){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "pages");
+		has = 1;
+	}
+  if ((access_rights & AR_MENU) == AR_MENU){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "menu");
+		has = 1;
+	}
+  if ((access_rights & AR_STATUS) == AR_STATUS){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "status");
+		has = 1;
+	}
+  if ((access_rights & AR_NOTES) == AR_NOTES){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "notes");
+		has = 1;
+	}
+  if ((access_rights & AR_MESSAGES) == AR_MESSAGES){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "messages");
+		has = 1;
+	}
+  if ((access_rights & AR_WALL) == AR_WALL){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "wall");
+		has = 1;
+	}
+  if ((access_rights & AR_ADS) == AR_ADS){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "ads");
+		has = 1;
+	}
+  if ((access_rights & AR_OFFLINE) == AR_OFFLINE){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "offline");
+		has = 1;
+	}
+  if ((access_rights & AR_DOCS) == AR_DOCS){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "docs");
+		has = 1;
+	}
+  if ((access_rights & AR_GROUPS) == AR_GROUPS){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "groups");
+		has = 1;
+	}
+  if ((access_rights & AR_NOTIFICATION) == AR_NOTIFICATION){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "notification");
+		has = 1;
+	}
+  if ((access_rights & AR_STATS) == AR_STATS){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "stats");
+		has = 1;
+	}
+  if ((access_rights & AR_EMAIL) == AR_EMAIL){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "email");
+		has = 1;
+	}
+  if ((access_rights & AR_MARKET) == AR_MARKET){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "market");
+		has = 1;
+	}
+  if ((access_rights & AR_PHONE_NUMBER) == AR_PHONE_NUMBER){
+		if (has)
+			strcat(buffer, "%20");
+		strcat(buffer, "phone_number");
+		has = 1;
+	}
+}
+
 char * c_vk_auth_url(
 		const char *client_id,  
 		uint32_t access_rights) //https://dev.vk.com/references/access-rights
@@ -30,10 +161,12 @@ char * c_vk_auth_url(
 		perror("malloc");
 		return NULL;
 	}
+	char rights[BUFSIZ];
+	acces_rigths_to_url(access_rights, rights);
 	sprintf(s, 
 			"%s?client_id=%s&response_type=token&"
-			"redirect_uri=vk%s://authorize&scope=%d&v=%s", 
-			OAUTH_URL, client_id, client_id, access_rights, VK_API);	
+			"redirect_uri=vk%s://authorize&scope=%s&v=%s", 
+			OAUTH_URL, client_id, client_id, rights, VK_API);	
 	
 	return s;
 }
@@ -47,10 +180,12 @@ char * c_vk_auth_code_url(
 		perror("malloc");
 		return NULL;
 	}
+	char rights[BUFSIZ];
+	acces_rigths_to_url(access_rights, rights);
 	sprintf(s, 
 			"%s?client_id=%s&"
-			"redirect_uri=http://localhost:%d&scope=%d&v=%s", 
-			OAUTH_URL, client_id, DEFAULT_PORT, access_rights, VK_API);	
+			"redirect_uri=http://localhost:%d&scope=%s&v=%s", 
+			OAUTH_URL, client_id, DEFAULT_PORT, rights, VK_API);	
 	
 	return s;
 }
