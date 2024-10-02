@@ -2,7 +2,7 @@
  * File              : http.c
  * Author            : Igor V. Sementsov <ig.kuzm@gmail.com>
  * Date              : 13.08.2023
- * Last Modified Date: 17.08.2023
+ * Last Modified Date: 02.10.2024
  * Last Modified By  : Igor V. Sementsov <ig.kuzm@gmail.com>
  */
 
@@ -83,11 +83,12 @@ int c_vk_run_method(
 	va_start(argv, method);
 	const char *arg = va_arg(argv, const char*);
 	while (arg) {
-		sprintf(requestString, "%s&%s", requestString, arg);
+		strcat(requestString, "&");
+		strcat(requestString, arg);
 		arg = va_arg(argv, const char*);	
 	}
 	va_end(argv);
-	//printf("REQUEST: %s\n", requestString);
+	printf("REQUEST: %s\n", requestString);
 
 	curl_easy_setopt(curl, CURLOPT_URL, requestString);
 	curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, http_method);		
